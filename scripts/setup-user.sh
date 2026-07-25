@@ -48,7 +48,9 @@ append_once "$HOME/.bashrc" "# --- agent-kit ---" \
 'export BROWSER=wslview                      # OAuth 登录时自动打开 Windows 浏览器
 export HF_ENDPOINT=https://hf-mirror.com     # HuggingFace 国内镜像(本地转写模型用)
 export PATH="$HOME/.local/bin:$PATH"
-[ -f "$HOME/.config/agent-kit/env" ] && . "$HOME/.config/agent-kit/env"'
+[ -f "$HOME/.config/agent-kit/env" ] && . "$HOME/.config/agent-kit/env"
+# 开终端若正处在家目录,自动站到工作区(这样直接敲 opencode/claude 也带上工作区规范)
+case $- in *i*) [ "$PWD" = "$HOME" ] && [ -d "$HOME/workspace" ] && cd "$HOME/workspace";; esac'
 
 if ! grep -q npmmirror "$HOME/.npmrc" 2>/dev/null; then
     echo 'registry=https://registry.npmmirror.com' >> "$HOME/.npmrc"
