@@ -44,6 +44,7 @@
 | 「AI 工作区」文件夹 | **工作区就建在 Windows 文档目录里**,资源管理器/Word/播放器原生直开;AI 也直接够得着你的桌面和下载文件夹 |
 | `ai` 命令族 | `ai` 启动默认;`ai claude` 临时换人;`ai use kimi` 换默认;`ai list` 看阵容;`ai-config` 改 Key;`ai-video` 转写;`ai-install` 加装 |
 | 桌面「AI 助手」 | 和 AI 对话的入口;自动优先用 Windows Terminal 打开(缺失时尝试自动安装) |
+| 桌面「AI 控制台」 | **原生管理面板**:列出 9 个 agent 与状态,双击启动任意一个、设默认、现场加装、打开工作区、重新配置 |
 | 桌面「AI 工作区」+ Obsidian(可选自动装) | **看文件全走原生**:文件夹直开、Word/视频/图片双击即看;Markdown 用 Obsidian 舒服阅读;发平台文案自动附 -纯文本.txt |
 | ffmpeg + 转写通道 | 短视频→文字稿(硅基流动 SenseVoice 在线,或本地 faster-whisper) |
 

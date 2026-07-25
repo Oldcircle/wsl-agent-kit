@@ -210,15 +210,53 @@ run_agent() { # <名字> [参数...]
 
 case "${1:-}" in
     list)
-        DEF="$(cat "$CONF_DIR/default-agent" 2>/dev/null || echo '(未设置)')"
+        DEF="$(cat "$CONF_DIR/default-agent" 2>/dev/null || echo '')"
+        if [ "${2:-}" = "--plain" ]; then
+            # 机器可读:名字|已装(1/0)|默认(1/0),供「AI 控制台」解析
+            for a in $KNOWN; do
+                inst=0; has_agent "$a" && inst=1
+                d=0; [ "$a" = "$DEF" ] && d=1
+                printf '%s|%d|%d\n' "$a" "$inst" "$d"
+            done
+            exit 0
+        fi
         echo "已安装的 agent(* 为默认):"
         for a in $KNOWN; do
             if has_agent "$a"; then
                 if [ "$a" = "$DEF" ]; then echo "  * $a"; else echo "    $a"; fi
             fi
         done
-        echo "临时用某个:ai <名字>;换默认:ai use <名字>;加装:ai-install <名字>"
+        echo "临时用某个:ai <名字>;换默认:ai use <名字>;加装:ai-install <名字>;选着启动:ai menu"
         exit 0 ;;
+    menu)
+        # 终端里的启动菜单:↑↓ 选已装 agent,回车启动(TTY 专用)
+        if [ ! -t 0 ]; then echo "ai menu 需要交互终端"; exit 1; fi
+        AVAIL=""
+        for a in $KNOWN; do has_agent "$a" && AVAIL="$AVAIL $a"; done
+        # shellcheck disable=SC2086
+        set -- $AVAIL
+        [ $# -gt 0 ] || { echo "还没有装任何 agent?运行 ai-install <名字>"; exit 1; }
+        cur=0; n=$#
+        printf '\n选择要启动的 AI( ↑↓ + 回车 ):\n\n'
+        i=0; while [ $i -lt $n ]; do printf '\n'; i=$((i+1)); done
+        while :; do
+            printf '\033[%dA' "$n"
+            i=1
+            for a in "$@"; do
+                if [ $((i-1)) -eq $cur ]; then printf '\033[2K \033[7m %s \033[0m\n' "$a"
+                else printf '\033[2K  %s\n' "$a"; fi
+                i=$((i+1))
+            done
+            IFS= read -rsn1 k || exit 1
+            case "$k" in
+                $'\033') read -rsn2 -t 1 r || r=""
+                         case "$r" in
+                             '[A') cur=$(( (cur-1+n)%n )) ;;
+                             '[B') cur=$(( (cur+1)%n )) ;;
+                         esac ;;
+                '') shift "$cur"; exec /usr/local/bin/ai "$1" ;;
+            esac
+        done ;;
     use)
         NEW="${2:-}"
         if [ -z "$NEW" ] || ! is_known "$NEW"; then

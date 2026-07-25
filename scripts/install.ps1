@@ -342,6 +342,19 @@ try {
     $lnk2.Description = 'AI 工作区:所有产出文件都在这个文件夹里'
     $lnk2.Save()
     Write-Ok "桌面已创建「AI 工作区」快捷方式(就是文档里的 AI工作区 文件夹)"
+
+    # 第三个快捷方式:AI 控制台(原生管理面板:启动/设默认/加装)
+    $consolePath = Join-Path $PSScriptRoot 'console.ps1'
+    if (Test-Path $consolePath) {
+        $lnk3 = $shell.CreateShortcut((Join-Path $desktop 'AI 控制台.lnk'))
+        $lnk3.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $lnk3.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$consolePath`""
+        $lnk3.WorkingDirectory = $RepoRoot
+        $lnk3.IconLocation = "$env:SystemRoot\System32\imageres.dll,109"
+        $lnk3.Description = 'AI 控制台:查看/启动/管理所有 AI 助手'
+        $lnk3.Save()
+        Write-Ok "桌面已创建「AI 控制台」快捷方式(管理面板)"
+    }
 } catch {
     Write-Warn2 "快捷方式创建失败(不影响使用):$($_.Exception.Message)"
 }

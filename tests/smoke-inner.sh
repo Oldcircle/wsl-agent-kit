@@ -108,6 +108,13 @@ grep -c 'agent-kit ---' "$HOMEDIR/.bashrc" | grep -qx 1 || fail "第 2 遍后 .b
 [ "$(cat "$HOMEDIR/workspace/notes/_index.md")" = "我的私货" ] || fail "第 2 遍覆盖了用户文件"
 pass "幂等性通过(重复运行无副作用)"
 
+# ---- ai list --plain(AI 控制台的数据接口) ----
+PLAIN="$(runuser -u "$KIT_USER" -- bash -lc 'ai list --plain')"
+[ "$(echo "$PLAIN" | wc -l)" -eq 9 ] || fail "ai list --plain 应输出 9 行,得到:$PLAIN"
+echo "$PLAIN" | grep -q '^opencode|1|' || fail "--plain 缺 opencode 已装标记"
+echo "$PLAIN" | grep -Eq '^gemini\|0\|0$' || fail "--plain 未装项格式不对"
+pass "ai list --plain 接口格式正确"
+
 # ---- configure.sh 非交互冒烟(DeepSeek 假 Key 全流程) ----
 echo "=========== configure.sh 冒烟 ==========="
 # 菜单序号:2=DeepSeek(1 是 Kimi 会员)
