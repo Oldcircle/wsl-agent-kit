@@ -228,6 +228,18 @@ case "${1:-}" in
         done
         echo "临时用某个:ai <名字>;换默认:ai use <名字>;加装:ai-install <名字>;选着启动:ai menu"
         exit 0 ;;
+    status)
+        # 机器可读状态,供「AI 控制台」顶部状态栏(ai status --plain)
+        DEF="$(cat "$CONF_DIR/default-agent" 2>/dev/null || echo '')"
+        MODEL_LINE=""
+        [ -f "$HOME/.config/opencode/opencode.json" ] && \
+            MODEL_LINE="$(jq -r '.model // ""' "$HOME/.config/opencode/opencode.json" 2>/dev/null || true)"
+        AW=0; [ -n "${ANTHROPIC_BASE_URL:-}" ] && [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && AW=1
+        OW=0; [ -n "${OPENAI_API_KEY:-}" ] && OW=1
+        SF=0; [ -n "${SILICONFLOW_API_KEY:-}" ] && SF=1
+        printf 'default=%s\nmodel=%s\nclaude_wired=%d\nopenai_env=%d\ntranscribe=%d\n' \
+            "${DEF:-未配置}" "$MODEL_LINE" "$AW" "$OW" "$SF"
+        exit 0 ;;
     menu)
         # 终端里的启动菜单:↑↓ 选已装 agent,回车启动(TTY 专用)
         if [ ! -t 0 ]; then echo "ai menu 需要交互终端"; exit 1; fi
@@ -270,6 +282,10 @@ esac
 
 if [ -n "${1:-}" ] && is_known "$1"; then
     A="$1"; shift
+    if [ "$A" = "claude" ] && [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
+        echo "[提示] Claude Code 还没接国内端点(你的服务商可能没有 Anthropic 兼容接口),"
+        echo "       即将进入它的官方登录;国内 Key 用户建议改用 OpenCode,或 ai-config 换 DeepSeek/GLM/Kimi。"
+    fi
     run_agent "$A" "$@"
 fi
 

@@ -132,6 +132,16 @@ jq -e '.provider.deepseek.options.baseURL == "https://api.deepseek.com/v1"
     "$HOMEDIR/.config/opencode/opencode.json" >/dev/null || fail "opencode.json provider 配置不对"
 pass "configure.sh:env/default-agent/opencode.json 全部正确"
 
+# 接线广播:即使默认选了 OpenCode,Claude Code 也应已接 Anthropic 端点
+grep -q 'ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"' "$CONF/env" \
+    || fail "接线广播失效:env 缺 ANTHROPIC_BASE_URL"
+grep -q 'ANTHROPIC_AUTH_TOKEN="sk-test-fake-key"' "$CONF/env" || fail "env 缺 ANTHROPIC_AUTH_TOKEN"
+STATUS="$(runuser -u "$KIT_USER" -- bash -lc 'ai status --plain')"
+echo "$STATUS" | grep -qx 'default=opencode' || fail "status default 不对:$STATUS"
+echo "$STATUS" | grep -qx 'claude_wired=1' || fail "status 未反映 Claude 接线:$STATUS"
+echo "$STATUS" | grep -qx 'model=deepseek/deepseek-v4-flash' || fail "status model 不对:$STATUS"
+pass "接线广播 + ai status 接口正确(配一次 Key,Claude 同步可用)"
+
 # ---- video2text 无 Key 时的降级提示 ----
 set +e
 OUT="$(runuser -u "$KIT_USER" -- bash -lc 'ai-video /tmp/不存在.mp4' 2>&1)"

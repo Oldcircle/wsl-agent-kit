@@ -74,13 +74,20 @@ $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
 $form.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10)
 
+$statusLbl = New-Object System.Windows.Forms.Label
+$statusLbl.Location = New-Object System.Drawing.Point(12, 8)
+$statusLbl.Size = New-Object System.Drawing.Size(536, 24)
+$statusLbl.ForeColor = [System.Drawing.Color]::FromArgb(30, 90, 190)
+$statusLbl.Text = '状态读取中…'
+$form.Controls.Add($statusLbl)
+
 $lv = New-Object System.Windows.Forms.ListView
 $lv.View = 'Details'
 $lv.FullRowSelect = $true
 $lv.MultiSelect = $false
 $lv.HideSelection = $false
-$lv.Location = New-Object System.Drawing.Point(12, 12)
-$lv.Size = New-Object System.Drawing.Size(390, 360)
+$lv.Location = New-Object System.Drawing.Point(12, 36)
+$lv.Size = New-Object System.Drawing.Size(390, 336)
 [void]$lv.Columns.Add('AI 助手', 150)
 [void]$lv.Columns.Add('说明', 160)
 [void]$lv.Columns.Add('状态', 72)
@@ -101,12 +108,33 @@ function New-Btn([string]$text, [int]$y) {
     $form.Controls.Add($b)
     return $b
 }
-$btnStart   = New-Btn '▶ 启动'        12
-$btnDefault = New-Btn '★ 设为默认'    52
-$btnInstall = New-Btn '⬇ 安装选中项'  92
-$btnWs      = New-Btn '📁 打开工作区' 152
-$btnConfig  = New-Btn '🔧 重新配置'   192
-$btnRefresh = New-Btn '↻ 刷新'        232
+$btnStart   = New-Btn '▶ 启动'         36
+$btnDefault = New-Btn '★ 设为默认'     76
+$btnInstall = New-Btn '⬇ 安装选中项'  116
+$btnWs      = New-Btn '📁 打开工作区'  176
+$btnConfig  = New-Btn '🔑 配置 AI 服务' 216
+$btnRefresh = New-Btn '↻ 刷新'         256
+
+function Get-KitStatus {
+    $out = & $wslExe -d $Distro -- bash -lc 'ai status --plain' 2>$null
+    $st = @{}
+    foreach ($line in @($out)) {
+        if ("$line" -match '^([a-z_]+)=(.*)$') { $st[$Matches[1]] = $Matches[2] }
+    }
+    return $st
+}
+
+function Update-StatusBar {
+    $st = Get-KitStatus
+    if ($st.Count -eq 0) { $statusLbl.Text = '状态:未读取到(先完成安装/配置)'; return }
+    $parts = @()
+    if ($st['model'])                 { $parts += "服务:$($st['model'])" }
+    if ($st['default'])               { $parts += "默认:$($st['default'])" }
+    if ($st['claude_wired'] -eq '1')  { $parts += 'Claude 已接线' }
+    if ($st['transcribe'] -eq '1')    { $parts += '视频转写 ✓' }
+    if ($parts.Count -eq 0)           { $parts = @('尚未配置 AI 服务(点右侧「配置 AI 服务」)') }
+    $statusLbl.Text = ($parts -join '   ·   ')
+}
 
 function Refresh-List {
     $lv.Items.Clear()
@@ -129,6 +157,7 @@ function Refresh-List {
         [void]$lv.Items.Add($item)
     }
     $tip.Text = '双击 = 启动;★ 是双击桌面「AI 助手」时的默认。灰色 = 未安装。'
+    Update-StatusBar
 }
 
 function Get-Selected {

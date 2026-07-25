@@ -67,8 +67,10 @@ add_opencode_provider() {
     ok "OpenCode 已配置:$name / $model"
 }
 
-# Claude Code 接线(各家官方支持的 Anthropic 兼容端点)
-wire_claude() { # <anthropic_base> <key> <model>
+# Claude Code 接线(各家官方支持的 Anthropic 兼容端点)。
+# 接线广播原则:只要服务商有 Anthropic 端点就无条件接好 Claude,
+# 「用哪个打开」只决定默认,不决定谁能用——配一次 Key,处处可用。
+wire_claude_env() { # <anthropic_base> <key> <model>
     {
         echo "export ANTHROPIC_BASE_URL=\"$1\""
         echo "export ANTHROPIC_AUTH_TOKEN=\"$2\""
@@ -77,22 +79,22 @@ wire_claude() { # <anthropic_base> <key> <model>
         echo "export API_TIMEOUT_MS=600000"
         echo "export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
     } >> "$ENV_FILE"
-    echo "claude" > "$CONF_DIR/default-agent"
-    ok "Claude Code 已接线:$3"
+    if command -v claude >/dev/null 2>&1; then
+        ok "Claude Code 已同步接线(随时可从控制台/ai claude 启动)"
+    fi
 }
 
-# 该服务商同时有 Anthropic 兼容端点时,让用户选启动界面
+# 有 Anthropic 端点的服务商:先广播接线,再问默认用谁打开
 pick_agent_for_anthropic() { # <anthropic_base> <key> <model> [rec=claude]
-    command -v claude >/dev/null 2>&1 || return 0   # 没装 Claude Code 就维持 OpenCode
+    wire_claude_env "$1" "$2" "$3"
+    command -v claude >/dev/null 2>&1 || return 0   # 没装 Claude Code,默认维持 OpenCode
     local pick
     if [ "${4:-}" = "claude" ]; then
-        printf '\n该套餐官方主打的用法就是接 Claude Code(全网最火 agent,闭源)。\n'
-        ask "用哪个界面打开?1=Claude Code(推荐) 2=OpenCode" pick "1"
-        if [ "$pick" != "2" ]; then wire_claude "$1" "$2" "$3"; fi
+        ask "默认用哪个打开?1=Claude Code(该套餐官方推荐) 2=OpenCode" pick "1"
+        if [ "$pick" != "2" ]; then echo "claude" > "$CONF_DIR/default-agent"; fi
     else
-        printf '\n这家服务商也能接到 Claude Code(全网最火 agent,闭源)。\n'
-        ask "用哪个界面打开?1=OpenCode(推荐) 2=Claude Code" pick "1"
-        if [ "$pick" = "2" ]; then wire_claude "$1" "$2" "$3"; fi
+        ask "默认用哪个打开?1=OpenCode(推荐) 2=Claude Code(全网最火)" pick "1"
+        if [ "$pick" = "2" ]; then echo "claude" > "$CONF_DIR/default-agent"; fi
     fi
 }
 
