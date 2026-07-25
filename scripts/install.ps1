@@ -224,18 +224,27 @@ if ($mode -ne 'c' -and $mode -ne 'C') {
 }
 
 # ---------- 6. 把安装包复制进 WSL 并执行 setup.sh ----------
+# 用 tar 管道传输,不依赖 WSL 对 D:/U 盘等非系统盘的自动挂载(真机踩坑修复)。
+# 管道必须经 cmd.exe:PowerShell 5.1 的管道会破坏二进制流。
 Write-Step '复制安装文件到 Ubuntu…'
-$repoWsl = (& $wslExe -d $Distro -u root -- wslpath -u "$RepoRoot").Trim()
-if (-not $repoWsl) {
-    Write-Fail '无法转换仓库路径(wslpath 失败)。'
+$tarExe = Join-Path $env:SystemRoot 'System32\tar.exe'
+if (-not (Test-Path $tarExe)) {
+    Write-Fail 'Windows 缺少自带 tar 命令(需要 Win10 1803+)。请先更新 Windows。'
     Exit-WithPause 1
 }
-$copyCmd = "rm -rf /opt/agent-kit && mkdir -p /opt/agent-kit && cp -r '$repoWsl'/. /opt/agent-kit/ && " +
-           "find /opt/agent-kit -type f \( -name '*.sh' -o -name '*.py' -o -name '*.md' -o -name '*.toml' " +
-           "-o -name '*.json' -o -name '*.txt' \) -exec sed -i 's/\r\$//' {} + && " +
-           "chmod +x /opt/agent-kit/scripts/*.sh"
-if ((Invoke-WslRoot $copyCmd) -ne 0) {
-    Write-Fail '复制文件进 WSL 失败。'
+$pipeCmd = "`"$tarExe`" -C `"$RepoRoot`" -cf - . | `"$wslExe`" -d $Distro -u root -- " +
+           "bash -c `"rm -rf /opt/agent-kit && mkdir -p /opt/agent-kit && tar -xf - -C /opt/agent-kit`""
+& $env:ComSpec /d /c $pipeCmd
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail '复制文件进 WSL 失败(tar 管道出错)。请把本窗口截图发给安装人。'
+    Exit-WithPause 1
+}
+$fixCmd = "test -f /opt/agent-kit/scripts/setup.sh && " +
+          "find /opt/agent-kit -type f \( -name '*.sh' -o -name '*.py' -o -name '*.md' -o -name '*.toml' " +
+          "-o -name '*.json' -o -name '*.txt' \) -exec sed -i 's/\r\$//' {} + && " +
+          "chmod +x /opt/agent-kit/scripts/*.sh"
+if ((Invoke-WslRoot $fixCmd) -ne 0) {
+    Write-Fail '安装文件校验失败(setup.sh 缺失?)。请确认 ZIP 已完整解压后重试。'
     Exit-WithPause 1
 }
 Write-Ok '文件已就位(/opt/agent-kit)'
