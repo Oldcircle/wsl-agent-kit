@@ -12,7 +12,7 @@
 > 前提:Windows 10 22H2 或 Windows 11,管理员账号,预留 6GB 磁盘。全程 10-20 分钟,大部分在等下载。
 
 1. **下载本仓库**:点本页绿色 `Code` 按钮 → `Download ZIP` → 解压到任意位置(如 `D:\ai-kit`)
-2. **双击 `install.bat`**,弹管理员授权点「是」。中途会让你**勾选要装哪些 agent**(直接回车 = 推荐组合:OpenCode + Claude Code + Kimi Code)
+2. **双击 `install.bat`**,弹管理员授权点「是」。中途会出现 **agent 勾选列表**(↑↓ 移动、空格勾选、回车确认;**什么都不动直接回车 = 推荐组合** OpenCode + Claude Code + Kimi Code)
    - 若提示「需要重启」:重启电脑后**再次双击 install.bat**,会自动续装
 3. 装完自动进入**配置向导**:按提示选你开通的 AI 服务(没开通先看 [docs/PROVIDERS.md](docs/PROVIDERS.md):图便宜办 DeepSeek Key,图省心买 Kimi ¥49/月 会员登录即用),向导会把 Key 自动接到你选的 agent 上
 

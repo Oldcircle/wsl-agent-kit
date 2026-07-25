@@ -97,28 +97,64 @@ pick_agent_for_anthropic() { # <anthropic_base> <key> <model> [rec=claude]
 }
 
 # ---------- 开始 ----------
+# 服务商列表选择:TTY 下 ↑↓/数字键 + 回车;非 TTY(管道/脚本)回退编号输入
+choose_provider() {
+    local labels=(
+        "Kimi 会员      ← 不懂就选这个:登录即用,全程不碰 Key(¥49/月起)"
+        "DeepSeek       ← 最省钱:注册复制一个 Key,充 ¥10 用很久"
+        "智谱 GLM(按量或 Coding Plan 包月)"
+        "阿里云百炼(通义千问)"
+        "硅基流动 SiliconFlow(一个 Key 用多家模型,还带语音转写)"
+        "Moonshot 开放平台(Kimi 按量付费,不买会员)"
+        "其他 OpenAI 兼容服务(自填地址/模型/Key;中转站也走这里)"
+        "还没办好账号,先跳过(我会留一张待办卡给你)"
+    )
+    local values=(1 2 3 4 5 6 7 0)
+    if [ ! -t 0 ]; then
+        ask "输入序号" CHOICE "1"
+        return 0
+    fi
+    local cur=0 n=${#labels[@]} i key rest
+    printf '\n你打算用哪家 AI?( ↑↓ 选择 + 回车;或直接按数字键;开通步骤见 docs/PROVIDERS.md )\n\n'
+    trap 'printf "\033[?25h"; exit 130' INT
+    printf '\033[?25l'
+    for ((i = 0; i < n; i++)); do printf '\n'; done
+    while :; do
+        printf '\033[%dA' "$n"
+        for ((i = 0; i < n; i++)); do
+            if [ "$i" -eq "$cur" ]; then
+                printf '\033[2K \033[7m %s) %s \033[0m\n' "${values[$i]}" "${labels[$i]}"
+            else
+                printf '\033[2K   %s) %s\n' "${values[$i]}" "${labels[$i]}"
+            fi
+        done
+        IFS= read -rsn1 key || { CHOICE=0; break; }
+        case "$key" in
+            $'\033')
+                # -t 用整数:转义序列后续字节已在缓冲区,不会真等 1 秒(且兼容旧 bash)
+                read -rsn2 -t 1 rest || rest=""
+                case "$rest" in
+                    '[A') cur=$(( (cur - 1 + n) % n )) ;;
+                    '[B') cur=$(( (cur + 1) % n )) ;;
+                esac ;;
+            '') CHOICE="${values[$cur]}"; break ;;
+            [0-9])
+                for ((i = 0; i < n; i++)); do
+                    if [ "${values[$i]}" = "$key" ]; then CHOICE="$key"; break 2; fi
+                done ;;
+        esac
+    done
+    printf '\033[?25h'
+    trap - INT
+    ok "已选择:$CHOICE"
+}
+
 printf '\n'
 printf '┌──────────────────────────────────────────────┐\n'
 printf '│           AI 助手配置向导(约 1 分钟)         │\n'
 printf '│     答错了也没关系,随时输入 ai-config 重来    │\n'
 printf '└──────────────────────────────────────────────┘\n'
-cat <<'MENU'
-
-你打算用哪家 AI?
-
-  1) Kimi 会员      ← 不懂就选这个:手机号登录,买个会员就能用,
-                       全程不碰「API Key」这种东西(¥49/月起)
-  2) DeepSeek       ← 最省钱:需要注册并复制一个 API Key,充 ¥10 用很久
-  3) 智谱 GLM(按量或 Coding Plan 包月)
-  4) 阿里云百炼(通义千问)
-  5) 硅基流动 SiliconFlow(一个 Key 用多家模型,还带语音转写)
-  6) Moonshot 开放平台(Kimi 按量付费,不买会员)
-  7) 其他 OpenAI 兼容服务(自己填地址/模型/Key;中转站也走这里)
-  0) 还没办好账号,先跳过(我会留一张待办卡给你)
-
-  各家账号怎么开通:手把手步骤在 docs/PROVIDERS.md
-MENU
-ask "输入序号" CHOICE "1"
+choose_provider
 
 # 重新生成 env(旧的备份)
 [ -f "$ENV_FILE" ] && cp "$ENV_FILE" "$ENV_FILE.bak"

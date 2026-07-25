@@ -183,45 +183,76 @@ if (-not $uid1000) {
 }
 Write-Ok "Ubuntu 用户:$uid1000"
 
-# ---------- 5. 选择要安装的 AI 工具(默认零决策) ----------
+# ---------- 5. 选择要安装的 AI 工具(勾选列表;回车即推荐组合) ----------
+function Select-AgentsChecklist {
+    # ↑↓ 移动,空格勾选,回车确认。返回勾中的 agent 名数组。
+    $items = @(
+        @{ Name='opencode'; Label='OpenCode        主推引擎,任意 API Key 直插(必装)';           Checked=$true;  Locked=$true  },
+        @{ Name='claude';   Label='Claude Code     全网最火(闭源),接 DeepSeek/GLM/Kimi 端点';   Checked=$true;  Locked=$false },
+        @{ Name='kimi';     Label='Kimi Code       中文界面,Kimi 会员登录即用,不碰 Key';        Checked=$true;  Locked=$false },
+        @{ Name='qwen';     Label='Qwen Code       阿里通义生态';                                 Checked=$false; Locked=$false },
+        @{ Name='codex';    Label='Codex CLI       OpenAI 出品(国内 Key 需手工配,进阶)';       Checked=$false; Locked=$false },
+        @{ Name='gemini';   Label='Gemini CLI      谷歌出品(需海外网络,进阶)';                 Checked=$false; Locked=$false },
+        @{ Name='hermes';   Label='Hermes 爱马仕   常驻助理:自进化技能+长期记忆(进阶)';         Checked=$false; Locked=$false },
+        @{ Name='openclaw'; Label='OpenClaw 小龙虾 常驻助理:消息通道型,安全注意见文档(进阶)'; Checked=$false; Locked=$false },
+        @{ Name='goose';    Label='Goose           Block 出品通用 agent(需 GitHub 网络)';       Checked=$false; Locked=$false }
+    )
+    Write-Host ''
+    Write-Host '   ↑↓ 移动光标, 空格 勾选/取消, 回车 确认安装' -ForegroundColor Gray
+    Write-Host '   什么都不动直接回车 = 推荐组合(前三项)' -ForegroundColor Gray
+    Write-Host ''
+    $top = [Console]::CursorTop
+    $idx = 0
+    while ($true) {
+        [Console]::SetCursorPosition(0, $top)
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $it = $items[$i]
+            $mark = '[ ]'
+            if ($it.Checked) { $mark = '[√]' }
+            if ($it.Locked)  { $mark = '[√]' }
+            $ptr = '   '
+            if ($i -eq $idx) { $ptr = ' > ' }
+            $line = ("$ptr$mark $($it.Label)").PadRight(84)
+            if ($i -eq $idx) { Write-Host $line -ForegroundColor Cyan }
+            else             { Write-Host $line -ForegroundColor Gray }
+        }
+        $key = [Console]::ReadKey($true)
+        switch ($key.Key) {
+            'UpArrow'   { if ($idx -gt 0) { $idx-- } else { $idx = $items.Count - 1 } }
+            'DownArrow' { if ($idx -lt $items.Count - 1) { $idx++ } else { $idx = 0 } }
+            'Spacebar'  { if (-not $items[$idx].Locked) { $items[$idx].Checked = -not $items[$idx].Checked } }
+            'Enter'     { return @($items | Where-Object { $_.Checked -or $_.Locked } | ForEach-Object { $_.Name }) }
+        }
+    }
+}
+
 Write-Step '选择要安装的 AI 工具…'
-$mode = Read-Host '直接回车 = 按推荐自动安装(不懂选什么就回车);想自己挑,输入 c'
-if ($mode -ne 'c' -and $mode -ne 'C') {
-    $agentsCsv = 'opencode,claude,kimi'
-    Write-Ok '按推荐组合安装:OpenCode + Claude Code + Kimi Code(以后随时可加装别的)'
-} else {
-    Write-Host @'
-
-    【任务型:在终端里帮你干活,推荐日常办公用】
-      1. OpenCode     主推,任意 API Key 直插(16 万+ star)
-      2. Claude Code  全网最火(闭源),可接 DeepSeek/GLM/Kimi 的兼容端点
-      3. Kimi Code    中文界面,买 Kimi 会员登录即用,不碰 Key
-      4. Qwen Code    阿里通义生态
-      5. Codex CLI    OpenAI 出品(国内 Key 需手工配,进阶)
-      6. Gemini CLI   谷歌出品(需海外网络,进阶)
-    【常驻助理型:住在电脑里的私人助理,进阶玩法】
-      7. Hermes Agent 爱马仕(22 万+ star,自我进化技能+长期记忆)
-      8. OpenClaw     小龙虾(38 万+ star,消息通道型助理;安全注意见文档)
-      9. Goose        Block 出品通用 agent
-
-'@ -ForegroundColor Gray
-    $sel = Read-Host '输入编号(逗号分隔,如 1,2,3);直接回车 = 推荐组合 1,2,3'
+$agentNames = $null
+$canInteractive = ($Host.Name -eq 'ConsoleHost') -and
+                  (-not [Console]::IsInputRedirected) -and (-not [Console]::IsOutputRedirected)
+if ($canInteractive) {
+    try { $agentNames = Select-AgentsChecklist }
+    catch { Write-Warn2 "交互列表不可用($($_.Exception.Message)),改用编号输入"; $agentNames = $null }
+}
+if (-not $agentNames) {
+    # 回退:老式编号输入(重定向/特殊控制台环境)
+    Write-Host '  1 OpenCode(必装) 2 Claude Code 3 Kimi Code 4 Qwen 5 Codex 6 Gemini 7 Hermes 8 OpenClaw 9 Goose' -ForegroundColor Gray
+    $sel = Read-Host '输入编号(逗号分隔);直接回车 = 推荐组合 1,2,3'
     if (-not $sel) { $sel = '1,2,3' }
     $agentMap = @{ '1'='opencode'; '2'='claude'; '3'='kimi'; '4'='qwen'; '5'='codex';
                    '6'='gemini'; '7'='hermes'; '8'='openclaw'; '9'='goose' }
-    $agentList = @()
+    $agentNames = @()
     foreach ($n in ($sel -split '[,,、 ]+')) {
         $k = $n.Trim()
-        if ($k -and $agentMap.ContainsKey($k)) { $agentList += $agentMap[$k] }
+        if ($k -and $agentMap.ContainsKey($k)) { $agentNames += $agentMap[$k] }
         elseif ($k) { Write-Warn2 "忽略无效编号:$k" }
     }
-    if ($agentList -notcontains 'opencode') {
-        $agentList = @('opencode') + $agentList   # OpenCode 是兜底启动器,必装
-        Write-Warn2 '已自动加上 OpenCode(它是其余工具缺席时的兜底)'
-    }
-    $agentsCsv = ($agentList | Select-Object -Unique) -join ','
-    Write-Ok "将安装:$agentsCsv"
 }
+if ($agentNames -notcontains 'opencode') {
+    $agentNames = @('opencode') + $agentNames   # OpenCode 是兜底启动器,必装
+}
+$agentsCsv = (@($agentNames) | Select-Object -Unique) -join ','
+Write-Ok "将安装:$agentsCsv"
 
 # ---------- 6. 把安装包复制进 WSL 并执行 setup.sh ----------
 # 用 tar 管道传输,不依赖 WSL 对 D:/U 盘等非系统盘的自动挂载(真机踩坑修复)。
