@@ -67,6 +67,27 @@ if (Test-Path $wslExe) {
     if ($LASTEXITCODE -eq 0) { $wslReady = $true }
 }
 
+function New-ResumeShortcut {
+    # 需要重启时,在桌面放一个显眼的「继续安装」入口,防止用户重启后忘记回来
+    try {
+        $desktop = [Environment]::GetFolderPath('Desktop')
+        $shell = New-Object -ComObject WScript.Shell
+        $lnk = $shell.CreateShortcut((Join-Path $desktop '▶ 重启后点我继续安装.lnk'))
+        $lnk.TargetPath = (Join-Path $RepoRoot 'install.bat')
+        $lnk.WorkingDirectory = $RepoRoot
+        $lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,137"
+        $lnk.Description = '重启电脑后双击这里,安装会自动继续'
+        $lnk.Save()
+    } catch { }
+}
+
+function Remove-ResumeShortcut {
+    try {
+        $p = Join-Path ([Environment]::GetFolderPath('Desktop')) '▶ 重启后点我继续安装.lnk'
+        if (Test-Path $p) { Remove-Item $p -Force }
+    } catch { }
+}
+
 if (-not $wslReady) {
     Write-Warn2 'WSL 尚未启用,现在自动安装(需要几分钟)…'
     & $wslExe --install --no-distribution
@@ -79,15 +100,17 @@ if (-not $wslReady) {
         Write-Warn2 '仍失败,尝试最基础的 wsl --install …'
         & $wslExe --install
     }
+    New-ResumeShortcut
     Write-Host ''
     Write-Host '┌──────────────────────────────────────────────┐' -ForegroundColor Yellow
-    Write-Host '│  WSL 组件已安装,但需要重启电脑才能生效。      │' -ForegroundColor Yellow
+    Write-Host '│  第一阶段完成!现在需要重启一次电脑。         │' -ForegroundColor Yellow
     Write-Host '│                                              │' -ForegroundColor Yellow
-    Write-Host '│  请现在重启电脑,然后再次双击 install.bat,   │' -ForegroundColor Yellow
-    Write-Host '│  安装会自动从这里继续。                      │' -ForegroundColor Yellow
+    Write-Host '│  重启后,双击桌面上的                         │' -ForegroundColor Yellow
+    Write-Host '│  「▶ 重启后点我继续安装」即可自动续装。       │' -ForegroundColor Yellow
     Write-Host '└──────────────────────────────────────────────┘' -ForegroundColor Yellow
     Exit-WithPause 0
 }
+Remove-ResumeShortcut   # 走到这说明 WSL 已就绪,清掉续装入口(若有)
 Write-Ok 'WSL 已启用'
 
 # 尽量把 WSL 内核更新到最新(失败不阻塞)
@@ -154,9 +177,14 @@ if (-not $uid1000) {
 }
 Write-Ok "Ubuntu 用户:$uid1000"
 
-# ---------- 5. 选择要安装的 AI 工具 ----------
-Write-Step '选择要安装的 AI 工具(可多选)…'
-Write-Host @'
+# ---------- 5. 选择要安装的 AI 工具(默认零决策) ----------
+Write-Step '选择要安装的 AI 工具…'
+$mode = Read-Host '直接回车 = 按推荐自动安装(不懂选什么就回车);想自己挑,输入 c'
+if ($mode -ne 'c' -and $mode -ne 'C') {
+    $agentsCsv = 'opencode,claude,kimi'
+    Write-Ok '按推荐组合安装:OpenCode + Claude Code + Kimi Code(以后随时可加装别的)'
+} else {
+    Write-Host @'
 
     【任务型:在终端里帮你干活,推荐日常办公用】
       1. OpenCode     主推,任意 API Key 直插(16 万+ star)
@@ -171,22 +199,23 @@ Write-Host @'
       9. Goose        Block 出品通用 agent
 
 '@ -ForegroundColor Gray
-$sel = Read-Host '输入编号(逗号分隔,如 1,2,3);直接回车 = 推荐组合 1,2,3'
-if (-not $sel) { $sel = '1,2,3' }
-$agentMap = @{ '1'='opencode'; '2'='claude'; '3'='kimi'; '4'='qwen'; '5'='codex';
-               '6'='gemini'; '7'='hermes'; '8'='openclaw'; '9'='goose' }
-$agentList = @()
-foreach ($n in ($sel -split '[,,、 ]+')) {
-    $k = $n.Trim()
-    if ($k -and $agentMap.ContainsKey($k)) { $agentList += $agentMap[$k] }
-    elseif ($k) { Write-Warn2 "忽略无效编号:$k" }
+    $sel = Read-Host '输入编号(逗号分隔,如 1,2,3);直接回车 = 推荐组合 1,2,3'
+    if (-not $sel) { $sel = '1,2,3' }
+    $agentMap = @{ '1'='opencode'; '2'='claude'; '3'='kimi'; '4'='qwen'; '5'='codex';
+                   '6'='gemini'; '7'='hermes'; '8'='openclaw'; '9'='goose' }
+    $agentList = @()
+    foreach ($n in ($sel -split '[,,、 ]+')) {
+        $k = $n.Trim()
+        if ($k -and $agentMap.ContainsKey($k)) { $agentList += $agentMap[$k] }
+        elseif ($k) { Write-Warn2 "忽略无效编号:$k" }
+    }
+    if ($agentList -notcontains 'opencode') {
+        $agentList = @('opencode') + $agentList   # OpenCode 是兜底启动器,必装
+        Write-Warn2 '已自动加上 OpenCode(它是其余工具缺席时的兜底)'
+    }
+    $agentsCsv = ($agentList | Select-Object -Unique) -join ','
+    Write-Ok "将安装:$agentsCsv"
 }
-if ($agentList -notcontains 'opencode') {
-    $agentList = @('opencode') + $agentList   # OpenCode 是兜底启动器,必装
-    Write-Warn2 '已自动加上 OpenCode(它是其余工具缺席时的兜底)'
-}
-$agentsCsv = ($agentList | Select-Object -Unique) -join ','
-Write-Ok "将安装:$agentsCsv"
 
 # ---------- 6. 把安装包复制进 WSL 并执行 setup.sh ----------
 Write-Step '复制安装文件到 Ubuntu…'
@@ -294,8 +323,13 @@ Write-Host '    提示:如果现在还没办好 Key,可以按 Ctrl+C 跳过,之�
 
 Write-Host ''
 Write-Host '=============================================' -ForegroundColor Green
-Write-Host '  安装完成!'                                   -ForegroundColor Green
-Write-Host '  日常使用:双击桌面「AI 助手」即可。'           -ForegroundColor Green
-Write-Host '  使用教程:docs/USAGE.md(仓库里)'             -ForegroundColor Green
+Write-Host '  安装完成!接下来就三步:'                      -ForegroundColor Green
+Write-Host '  1. 还没有 AI 账号?最简单:手机装 Kimi,买'    -ForegroundColor Green
+Write-Host '     Kimi Code 会员(约 49 元/月,像买视频会员)'  -ForegroundColor Green
+Write-Host '  2. 双击桌面「AI 助手」,按提示登录'            -ForegroundColor Green
+Write-Host '  3. 说出第一句话:介绍一下你能帮我做什么'        -ForegroundColor Green
+Write-Host ''                                               -ForegroundColor Green
+Write-Host '  看 AI 做的文件:双击桌面「AI 工作区」'          -ForegroundColor Green
+Write-Host '  (里面有一份《使用说明》,遇事先看它)'          -ForegroundColor Green
 Write-Host '=============================================' -ForegroundColor Green
 Exit-WithPause 0

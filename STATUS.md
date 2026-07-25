@@ -2,6 +2,9 @@
 
 ## 当前状态
 
+v1.2 小白体验:zip 未解压检测、安装零决策(回车=推荐组合)、重启续装桌面入口、向导 Kimi 会员置顶+待办卡闭环、工作区内置《使用说明.md》速查卡、AGENTS 首次见面仪式、README 附发朋友话术模板。
+
+
 v1.1 合成版·原生图形方案:选型调研完成(docs/RESEARCH.md,2026-07-25,9 个当红 agent 全景);安装时自选 agent(默认 OpenCode+Claude Code+Kimi Code),`ai-install` 追加,`ai use/list` 切换;`ai-config` 按「Key + 已装 agent」自动接线(含 → Claude Code 的 Anthropic 兼容端点)。**工作区建在 Windows「文档\AI工作区」**(WSL 软链 ~/workspace),看文件全原生(资源管理器/Obsidian 可选自动装/播放器),无网页组件;AGENTS.md 注入真实桌面/下载路径。容器冒烟通过(shellcheck + Ubuntu24.04 双跑幂等 + agents-only + configure 非交互 + ps1 解析)。
 
 ## 下次入口

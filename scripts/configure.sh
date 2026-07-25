@@ -99,22 +99,24 @@ pick_agent_for_anthropic() { # <anthropic_base> <key> <model> [rec=claude]
 # ---------- 开始 ----------
 printf '\n'
 printf '┌──────────────────────────────────────────────┐\n'
-printf '│           AI 助手配置向导(1 分钟)           │\n'
+printf '│           AI 助手配置向导(约 1 分钟)         │\n'
+printf '│     答错了也没关系,随时输入 ai-config 重来    │\n'
 printf '└──────────────────────────────────────────────┘\n'
 cat <<'MENU'
 
-你打算用哪家 AI?(不知道选什么就看括号里的说明)
+你打算用哪家 AI?
 
-  1) DeepSeek         ← 推荐:便宜好用,充 ¥10 能用很久
-  2) Kimi 会员套餐    ← 最省心:不碰 API Key,登录即用;¥49/月起,中文写作强
+  1) Kimi 会员      ← 不懂就选这个:手机号登录,买个会员就能用,
+                       全程不碰「API Key」这种东西(¥49/月起)
+  2) DeepSeek       ← 最省钱:需要注册并复制一个 API Key,充 ¥10 用很久
   3) 智谱 GLM(按量或 Coding Plan 包月)
   4) 阿里云百炼(通义千问)
   5) 硅基流动 SiliconFlow(一个 Key 用多家模型,还带语音转写)
   6) Moonshot 开放平台(Kimi 按量付费,不买会员)
   7) 其他 OpenAI 兼容服务(自己填地址/模型/Key;中转站也走这里)
-  0) 暂不配置,先看看
+  0) 还没办好账号,先跳过(我会留一张待办卡给你)
 
-  各家 Key 怎么申请:见仓库 docs/PROVIDERS.md(step by step)
+  各家账号怎么开通:手把手步骤在 docs/PROVIDERS.md
 MENU
 ask "输入序号" CHOICE "1"
 
@@ -125,19 +127,19 @@ chmod 600 "$ENV_FILE"
 
 case "$CHOICE" in
     1)
+        echo "kimi" > "$CONF_DIR/default-agent"
+        ok "已设为 Kimi Code。"
+        printf '\n接下来:启动 AI 助手后,首次会让你选登录方式 → 选 OAuth/浏览器登录,\n'
+        printf 'Windows 浏览器会自动弹出,用 Kimi 账号(手机号)登录即可。\n'
+        printf '还没买会员?手机 Kimi App 里购买 Kimi Code 会员,详见 docs/PROVIDERS.md 第 1 节。\n'
+        ;;
+    2)
         ask "粘贴 DeepSeek API Key(sk-开头)" KEY
         ask "模型" MODEL "deepseek-v4-flash"
         add_opencode_provider "deepseek" "DeepSeek" "@ai-sdk/openai-compatible" \
             "https://api.deepseek.com/v1" "DEEPSEEK_API_KEY" "$KEY" "$MODEL"
         test_openai_endpoint "https://api.deepseek.com/v1" "$KEY"
         pick_agent_for_anthropic "https://api.deepseek.com/anthropic" "$KEY" "$MODEL"
-        ;;
-    2)
-        echo "kimi" > "$CONF_DIR/default-agent"
-        ok "已设为 Kimi Code。"
-        printf '\n接下来:启动 AI 助手后,首次会让你选登录方式 → 选 OAuth/浏览器登录,\n'
-        printf 'Windows 浏览器会自动弹出,用 Kimi 账号(手机号)登录即可。\n'
-        printf '会员购买入口与套餐说明:docs/PROVIDERS.md 第 2 节。\n'
         ;;
     3)
         ask "你用的是哪种?a=按量付费(普通 API Key) b=Coding Plan 包月套餐" GLMKIND "a"
@@ -186,7 +188,21 @@ case "$CHOICE" in
         test_openai_endpoint "$BASE" "$KEY"
         ;;
     0)
-        warn "跳过配置。之后终端输入 ai-config 随时可配。"
+        mkdir -p "$HOME/workspace"
+        cat > "$HOME/workspace/开始使用前必读.txt" <<'TODO'
+【AI 助手 · 开始使用前的 3 件事】
+
+1. 开一个 AI 账号(二选一):
+   · 最省心:手机装 Kimi App → 购买 Kimi Code 会员(约 49 元/月)
+   · 最省钱:电脑打开 platform.deepseek.com → 注册 → 创建 API Key(复制保存)→ 充值 10 元
+
+2. 双击桌面「AI 助手」,按提示选择你办好的那家,登录或粘贴 Key
+
+3. 对它说第一句话试试:「介绍一下你能帮我做什么」
+
+搞不定就把这页拍照发给帮你安装的人。配置完成后这张卡会自动消失。
+TODO
+        warn "已跳过。待办卡放在「AI 工作区」文件夹里:开始使用前必读.txt"
         exit 0
         ;;
     *)
@@ -204,6 +220,8 @@ if [ "$CHOICE" != "5" ]; then
         ok "视频转文字已启用(命令:ai-video 文件名)"
     fi
 fi
+
+rm -f "$HOME/workspace/开始使用前必读.txt"   # 配置完成,撤掉待办卡
 
 printf '\n'
 ok "配置完成!"

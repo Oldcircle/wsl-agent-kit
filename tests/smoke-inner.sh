@@ -110,8 +110,9 @@ pass "幂等性通过(重复运行无副作用)"
 
 # ---- configure.sh 非交互冒烟(DeepSeek 假 Key 全流程) ----
 echo "=========== configure.sh 冒烟 ==========="
+# 菜单序号:2=DeepSeek(1 是 Kimi 会员)
 runuser -u "$KIT_USER" -- bash -c \
-    'printf "1\nsk-test-fake-key\n\n\n\n" | bash /opt/agent-kit/scripts/configure.sh' \
+    'printf "2\nsk-test-fake-key\n\n\n\n" | bash /opt/agent-kit/scripts/configure.sh' \
     || fail "configure.sh 非交互执行失败"
 CONF="$HOMEDIR/.config/agent-kit"
 grep -q 'DEEPSEEK_API_KEY="sk-test-fake-key"' "$CONF/env" || fail "env 未写入 DeepSeek Key"
