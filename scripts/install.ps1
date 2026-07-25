@@ -78,7 +78,10 @@ function New-ResumeShortcut {
         $lnk.IconLocation = "$env:SystemRoot\System32\shell32.dll,137"
         $lnk.Description = '重启电脑后双击这里,安装会自动继续'
         $lnk.Save()
-    } catch { }
+        Write-Ok '已在桌面放好「▶ 重启后点我继续安装」'
+    } catch {
+        Write-Warn2 "续装快捷方式创建失败(没关系,重启后再次双击 install.bat 一样继续):$($_.Exception.Message)"
+    }
 }
 
 function Remove-ResumeShortcut {
@@ -89,6 +92,8 @@ function Remove-ResumeShortcut {
 }
 
 if (-not $wslReady) {
+    # 先放好续装入口再动手装:wsl --install 可能触发系统重启提示,用户手快点了重启也不怕
+    New-ResumeShortcut
     Write-Warn2 'WSL 尚未启用,现在自动安装(需要几分钟)…'
     & $wslExe --install --no-distribution
     if ($LASTEXITCODE -ne 0) {
@@ -100,13 +105,14 @@ if (-not $wslReady) {
         Write-Warn2 '仍失败,尝试最基础的 wsl --install …'
         & $wslExe --install
     }
-    New-ResumeShortcut
     Write-Host ''
     Write-Host '┌──────────────────────────────────────────────┐' -ForegroundColor Yellow
     Write-Host '│  第一阶段完成!现在需要重启一次电脑。         │' -ForegroundColor Yellow
     Write-Host '│                                              │' -ForegroundColor Yellow
     Write-Host '│  重启后,双击桌面上的                         │' -ForegroundColor Yellow
-    Write-Host '│  「▶ 重启后点我继续安装」即可自动续装。       │' -ForegroundColor Yellow
+    Write-Host '│  「▶ 重启后点我继续安装」即可自动续装;       │' -ForegroundColor Yellow
+    Write-Host '│  桌面没这个图标的话,再次双击 install.bat     │' -ForegroundColor Yellow
+    Write-Host '│  效果完全一样。                              │' -ForegroundColor Yellow
     Write-Host '└──────────────────────────────────────────────┘' -ForegroundColor Yellow
     Exit-WithPause 0
 }
