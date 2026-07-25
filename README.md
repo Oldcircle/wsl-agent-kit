@@ -42,7 +42,8 @@
 | 你勾选的 agents | 全部共享下面这套工作区与规范,`ai-config` 一键切换默认启动哪个 |
 | `~/workspace` 中文工作区 | inbox 收件箱 + 文案/调研/短视频项目区 + 6 套产出模板 + AI 工作规范(AGENTS.md) |
 | `win-桌面`/`win-文档`/`win-下载` | 直通 Windows 真实文件夹的桥,AI 可以直接处理你桌面上的文件 |
-| `ai` / `ai-config` / `ai-video` / `ai-install` | 启动 / 改配置 / 视频转文字 / 加装 agent 四个命令 |
+| `ai` 命令族 | `ai` 启动默认;`ai claude` 临时换人;`ai use kimi` 换默认;`ai list` 看阵容;`ai-config` 改 Key;`ai-video` 转写;`ai-install` 加装 |
+| 桌面「AI 助手」 | 自动优先用 Windows Terminal 打开(中文显示/复制粘贴体验更好,缺失时尝试自动安装) |
 | ffmpeg + 转写通道 | 短视频→文字稿(硅基流动 SenseVoice 在线,或本地 faster-whisper) |
 
 ## 常用参数(给安装人)

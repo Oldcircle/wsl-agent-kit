@@ -174,26 +174,70 @@ done
 step "安装 ai / ai-config / ai-video 命令…"
 cat > /usr/local/bin/ai <<'LAUNCHER'
 #!/usr/bin/env bash
-# AI 助手统一入口:首次自动进配置向导,之后直接启动所选 agent
+# AI 助手统一入口
+#   ai              启动默认 agent(首次自动进配置向导)
+#   ai <名字>       本次临时用指定 agent,如 ai claude / ai kimi
+#   ai use <名字>   把默认换成指定 agent(下次双击图标就是它)
+#   ai list         看看装了哪些、当前默认是谁
 set -u
 CONF_DIR="$HOME/.config/agent-kit"
+KNOWN="opencode kimi claude qwen codex gemini hermes openclaw goose"
 [ -f "$CONF_DIR/env" ] && . "$CONF_DIR/env"
+
+is_known() { case " $KNOWN " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+has_agent() {
+    if [ "$1" = "kimi" ]; then
+        command -v kimi >/dev/null 2>&1 || command -v kimi-code >/dev/null 2>&1
+    else
+        command -v "$1" >/dev/null 2>&1
+    fi
+}
+run_agent() { # <名字> [参数...]
+    local a="$1"; shift
+    mkdir -p "$HOME/workspace"; cd "$HOME/workspace"
+    if [ "$a" = "kimi" ]; then
+        for c in kimi kimi-code; do
+            command -v "$c" >/dev/null 2>&1 && exec "$c" "$@"
+        done
+    elif command -v "$a" >/dev/null 2>&1; then
+        exec "$a" "$@"
+    fi
+    echo "[!] 「$a」未安装,改用 OpenCode 启动(追加安装:ai-install $a)"
+    exec opencode "$@"
+}
+
+case "${1:-}" in
+    list)
+        DEF="$(cat "$CONF_DIR/default-agent" 2>/dev/null || echo '(未设置)')"
+        echo "已安装的 agent(* 为默认):"
+        for a in $KNOWN; do
+            if has_agent "$a"; then
+                if [ "$a" = "$DEF" ]; then echo "  * $a"; else echo "    $a"; fi
+            fi
+        done
+        echo "临时用某个:ai <名字>;换默认:ai use <名字>;加装:ai-install <名字>"
+        exit 0 ;;
+    use)
+        NEW="${2:-}"
+        if [ -z "$NEW" ] || ! is_known "$NEW"; then
+            echo "用法:ai use <名字>(可选:$KNOWN)"; exit 1
+        fi
+        has_agent "$NEW" || { echo "「$NEW」还没安装,先跑:ai-install $NEW"; exit 1; }
+        mkdir -p "$CONF_DIR"; echo "$NEW" > "$CONF_DIR/default-agent"
+        echo "默认 agent 已换成:$NEW(现在起双击「AI 助手」就是它)"
+        exit 0 ;;
+esac
+
+if [ -n "${1:-}" ] && is_known "$1"; then
+    A="$1"; shift
+    run_agent "$A" "$@"
+fi
+
 if [ ! -f "$CONF_DIR/default-agent" ]; then
     echo "首次使用,先做一次配置(1 分钟)…"
     bash /opt/agent-kit/scripts/configure.sh || exit 1
 fi
-AGENT="$(cat "$CONF_DIR/default-agent" 2>/dev/null || echo opencode)"
-mkdir -p "$HOME/workspace"
-cd "$HOME/workspace"
-if [ "$AGENT" = "kimi" ]; then
-    for c in kimi kimi-code; do
-        command -v "$c" >/dev/null 2>&1 && exec "$c" "$@"
-    done
-elif command -v "$AGENT" >/dev/null 2>&1; then
-    exec "$AGENT" "$@"
-fi
-echo "[!] 默认 agent「$AGENT」未安装,改用 OpenCode 启动(追加安装:ai-install $AGENT)"
-exec opencode "$@"
+run_agent "$(cat "$CONF_DIR/default-agent" 2>/dev/null || echo opencode)" "$@"
 LAUNCHER
 chmod +x /usr/local/bin/ai
 

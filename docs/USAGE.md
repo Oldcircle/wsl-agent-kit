@@ -35,12 +35,15 @@
 **批量活**
 - 「把 win-下载/照片 里 300 张图按拍摄日期建文件夹归档,先演示 3 张」
 
-## 四个小命令(在 Ubuntu 终端里用)
+## 小命令速查(在 Ubuntu 终端里用)
 
 | 命令 | 作用 |
 |------|------|
-| `ai` | 启动 AI 助手(等于双击桌面图标) |
-| `ai-config` | 换 AI 服务商 / 重填 Key / 换默认打开哪个 agent |
+| `ai` | 启动默认 AI 助手(等于双击桌面图标) |
+| `ai claude` / `ai kimi` / `ai hermes` … | **本次**临时换一个 agent 开工 |
+| `ai use kimi` | **换默认**:以后双击图标就是它 |
+| `ai list` | 看装了哪些 agent、当前默认是谁 |
+| `ai-config` | 换 AI 服务商 / 重填 Key |
 | `ai-video 文件` | 手动把视频/音频转成文字稿(AI 通常会自己调用) |
 | `ai-install 名字` | 加装一个 agent,如 `ai-install hermes`、`ai-install openclaw` |
 
@@ -53,7 +56,15 @@
 - **Kimi Code**:中文界面;买了 Kimi 会员时的默认选择。
 - **Hermes(爱马仕)/ OpenClaw(小龙虾)**:常驻助理型,会记住你、能配置成主动干活,属于进阶玩法;第一次用建议让安装人陪你设置。OpenClaw 别随便装社区技能(有安全争议),消息通道功能在国内基本用不上,本机对话模式即可。
 
-想换默认:`ai-config` 重新走一遍;想临时用某个:终端里直接输它的名字(`opencode` / `claude` / `kimi` / `hermes`…)。
+想换默认:`ai use <名字>`(或 `ai-config` 重新走一遍);想临时用某个:`ai <名字>`。
+
+## 这些 AI 自带的界面是怎么回事?
+
+本安装包**不套壳**:装的都是各家官方原版,`ai` 只是帮你记住默认那个。所以:
+
+- 在 Ubuntu 终端里直接输 `opencode`、`claude`、`kimi`、`hermes`,用的就是官方原生界面,各家的全部功能(斜杠命令、主题、快捷键)一样不少;
+- 其中几家还有**官方图形版**,想要「不像黑窗口」的体验可以另装:Qwen Code Desktop、Hermes Agent 桌面版、Goose Desktop(以上装在 Windows 原生侧),OpenClaw 则自带本地网页控制台;聊天类还可以配 Cherry Studio(开源客户端,不是 agent);
+- **注意**:Windows 原生图形版默认不走我们 WSL 里的工作区(`~/workspace` 的模板、AGENTS.md 规矩、win-桥接对它们不生效),要访问 WSL 文件得走 `\\wsl$\` 路径。所以日常干活推荐还是用桌面「AI 助手」;图形版当补充的聊天窗口用。
 
 ## 验收习惯(重要)
 

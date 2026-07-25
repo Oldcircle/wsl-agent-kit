@@ -213,14 +213,45 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Ok 'Ubuntu 内安装完成'
 
-# ---------- 7. 桌面快捷方式 ----------
+# ---------- 7. 桌面快捷方式(优先 Windows Terminal,中文与复制粘贴体验更好) ----------
 Write-Step '创建桌面快捷方式…'
+
+function Find-WT {
+    $cands = @(
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\wt.exe'),
+        "$env:ProgramFiles\WindowsApps\wt.exe"
+    )
+    foreach ($c in $cands) { if ($c -and (Test-Path $c)) { return $c } }
+    $cmd = Get-Command wt.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    return $null
+}
+
+$wt = Find-WT
+if (-not $wt) {
+    # 尝试用 winget 静默安装 Windows Terminal(失败不阻塞,回退裸控制台)
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        Write-Warn2 '未检测到 Windows Terminal,尝试自动安装(约 1 分钟,可提升中文显示体验)…'
+        & winget install --id Microsoft.WindowsTerminal -e --silent `
+            --accept-source-agreements --accept-package-agreements *> $null
+        $wt = Find-WT
+    }
+}
+
 try {
     $desktop = [Environment]::GetFolderPath('Desktop')
     $shell = New-Object -ComObject WScript.Shell
     $lnk = $shell.CreateShortcut((Join-Path $desktop 'AI 助手.lnk'))
-    $lnk.TargetPath = $wslExe
-    $lnk.Arguments = "-d $Distro --cd ~ -- bash -lic ai"
+    if ($wt) {
+        $lnk.TargetPath = $wt
+        $lnk.Arguments = "$wslExe -d $Distro --cd ~ -- bash -lic ai"
+        Write-Ok '快捷方式将通过 Windows Terminal 打开(推荐)'
+    } else {
+        $lnk.TargetPath = $wslExe
+        $lnk.Arguments = "-d $Distro --cd ~ -- bash -lic ai"
+        Write-Warn2 '未装 Windows Terminal,先用系统控制台(之后从微软商店装上 Terminal 后可重跑 install.bat 升级快捷方式)'
+    }
     $lnk.IconLocation = "$wslExe,0"
     $lnk.Description = 'AI 办公助手(WSL)'
     $lnk.Save()
