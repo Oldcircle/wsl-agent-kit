@@ -1,0 +1,9 @@
+{
+  "context": {
+    "fileName": ["AGENTS.md", "QWEN.md"]
+  },
+  "tools": {
+    "approvalMode": "auto-edit"
+  },
+  "modelProviders": {}
+}

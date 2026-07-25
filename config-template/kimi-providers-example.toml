@@ -1,0 +1,25 @@
+# Kimi Code 第三方模型配置示例(~/.kimi-code/config.toml)
+# 默认用 Kimi 官方模型时【不需要】这个文件;只有想让 Kimi Code 跑别家模型才用。
+# 参考文档:https://www.kimi.com/code/docs/kimi-code-cli/configuration/config-files.html
+
+# --- 示例 1:GLM Coding Plan(智谱包月套餐,Anthropic 兼容端点) ---
+# [providers.zhipu]
+# type = "anthropic"
+# base_url = "https://open.bigmodel.cn/api/anthropic"
+#   [providers.zhipu.env]
+#   api_key = "ZHIPU_API_KEY"        # 从环境变量读 Key(已由 ai-config 写入)
+#
+# [models.glm]
+# provider = "zhipu"
+# model = "glm-5.2"
+
+# --- 示例 2:DeepSeek(Anthropic 兼容端点) ---
+# [providers.deepseek]
+# type = "anthropic"
+# base_url = "https://api.deepseek.com/anthropic"
+#   [providers.deepseek.env]
+#   api_key = "DEEPSEEK_API_KEY"
+#
+# [models.ds]
+# provider = "deepseek"
+# model = "deepseek-v4-flash"
