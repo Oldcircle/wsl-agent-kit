@@ -50,11 +50,11 @@ WSL 需要管理员权限,部分公司电脑被 IT 策略禁用虚拟化组件�
 
 ## 10. 想彻底卸载
 
-管理员 PowerShell:`wsl --unregister Ubuntu-24.04`(⚠️ 会删掉 WSL 里所有文件,先让 AI 把重要产出复制到 win-桌面);再删掉桌面快捷方式即可。Windows 本身不受影响。
+管理员 PowerShell:`wsl --unregister Ubuntu-24.04`(⚠️ 会删掉 WSL 里所有文件,但你的产出都在 Windows「文档\AI工作区」里,不受影响);再删掉桌面快捷方式即可。
 
 ## 11. 换了新电脑怎么搬家
 
-旧机:让 AI「把整个 workspace 打包成 zip 放到 win-桌面」。新机:跑 install.bat → 把 zip 解压回 `~/workspace` → `ai-config` 重配 Key。
+工作区就在「文档\AI工作区」,用你平时搬文档的任何方式(U 盘/网盘)拷到新机同位置;新机跑 install.bat → `ai-config` 重配 Key 即可。
 
 ## 给安装人:远程排障要点
 

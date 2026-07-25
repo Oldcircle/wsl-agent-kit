@@ -148,7 +148,7 @@ if (-not $uid1000) {
     Write-Warn2 "创建 Ubuntu 用户:$sanitized(免密码 sudo,个人电脑标准配置)"
     $null = Invoke-WslRoot ("useradd -m -s /bin/bash -G sudo $sanitized && " +
         "printf '%s ALL=(ALL) NOPASSWD:ALL\n' $sanitized > /etc/sudoers.d/agent-kit && chmod 440 /etc/sudoers.d/agent-kit && " +
-        "printf '[user]\ndefault=%s\n' $sanitized > /etc/wsl.conf")
+        "printf '[user]\ndefault=%s\n\n[automount]\noptions = \x22metadata\x22\n' $sanitized > /etc/wsl.conf")
     & $wslExe --terminate $Distro *> $null   # 重启发行版使默认用户生效
     $uid1000 = $sanitized
 }
@@ -205,8 +205,9 @@ if ((Invoke-WslRoot $copyCmd) -ne 0) {
 }
 Write-Ok '文件已就位(/opt/agent-kit)'
 
+$docsPath = [Environment]::GetFolderPath('MyDocuments')   # 自动识别 OneDrive 重定向
 Write-Step '在 Ubuntu 内安装 AI 助手(首次约 3-10 分钟,请耐心等待)…'
-& $wslExe -d $Distro -u root -- bash /opt/agent-kit/scripts/setup.sh --win-user "$env:UserName" --agents "$agentsCsv"
+& $wslExe -d $Distro -u root -- bash /opt/agent-kit/scripts/setup.sh --win-user "$env:UserName" --win-docs "$docsPath" --agents "$agentsCsv"
 if ($LASTEXITCODE -ne 0) {
     Write-Fail 'Ubuntu 内安装失败。上方日志有具体原因;修复后重新双击 install.bat 即可(可重复运行)。'
     Exit-WithPause 1
@@ -256,8 +257,34 @@ try {
     $lnk.Description = 'AI 办公助手(WSL)'
     $lnk.Save()
     Write-Ok "桌面已创建「AI 助手」快捷方式"
+
+    # 第二个快捷方式:AI 工作区文件夹(在文档目录里,资源管理器原生打开)
+    $wsFolder = Join-Path $docsPath 'AI工作区'
+    if (-not (Test-Path $wsFolder)) { New-Item -ItemType Directory -Path $wsFolder -Force | Out-Null }
+    $lnk2 = $shell.CreateShortcut((Join-Path $desktop 'AI 工作区.lnk'))
+    $lnk2.TargetPath = $wsFolder
+    $lnk2.IconLocation = "$env:SystemRoot\System32\imageres.dll,107"
+    $lnk2.Description = 'AI 工作区:所有产出文件都在这个文件夹里'
+    $lnk2.Save()
+    Write-Ok "桌面已创建「AI 工作区」快捷方式(就是文档里的 AI工作区 文件夹)"
 } catch {
     Write-Warn2 "快捷方式创建失败(不影响使用):$($_.Exception.Message)"
+}
+
+# ---------- 7b. 可选:安装 Obsidian(舒服地阅读 AI 写的 Markdown 文档) ----------
+$obsAns = Read-Host '要顺便安装 Obsidian 吗?免费笔记软件,用来舒服地阅读 AI 写的文档 [Y/n]'
+if ($obsAns -ne 'n' -and $obsAns -ne 'N') {
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($winget) {
+        & winget install --id Obsidian.Obsidian -e --silent --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok 'Obsidian 已安装。首次打开选「打开文件夹作为仓库」→ 选 文档\AI工作区'
+        } else {
+            Write-Warn2 'Obsidian 自动安装失败,可稍后到 obsidian.md 官网手动下载'
+        }
+    } else {
+        Write-Warn2 '本机没有 winget,请到 obsidian.md 官网手动下载安装'
+    }
 }
 
 # ---------- 8. 首次配置(交互) ----------

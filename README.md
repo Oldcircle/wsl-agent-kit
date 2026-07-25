@@ -41,9 +41,10 @@
 | WSL2 + Ubuntu 24.04 | AI 的独立工作环境,和 Windows 互不干扰 |
 | 你勾选的 agents | 全部共享下面这套工作区与规范,`ai-config` 一键切换默认启动哪个 |
 | `~/workspace` 中文工作区 | inbox 收件箱 + 文案/调研/短视频项目区 + 6 套产出模板 + AI 工作规范(AGENTS.md) |
-| `win-桌面`/`win-文档`/`win-下载` | 直通 Windows 真实文件夹的桥,AI 可以直接处理你桌面上的文件 |
+| 「AI 工作区」文件夹 | **工作区就建在 Windows 文档目录里**,资源管理器/Word/播放器原生直开;AI 也直接够得着你的桌面和下载文件夹 |
 | `ai` 命令族 | `ai` 启动默认;`ai claude` 临时换人;`ai use kimi` 换默认;`ai list` 看阵容;`ai-config` 改 Key;`ai-video` 转写;`ai-install` 加装 |
-| 桌面「AI 助手」 | 自动优先用 Windows Terminal 打开(中文显示/复制粘贴体验更好,缺失时尝试自动安装) |
+| 桌面「AI 助手」 | 和 AI 对话的入口;自动优先用 Windows Terminal 打开(缺失时尝试自动安装) |
+| 桌面「AI 工作区」+ Obsidian(可选自动装) | **看文件全走原生**:文件夹直开、Word/视频/图片双击即看;Markdown 用 Obsidian 舒服阅读;发平台文案自动附 -纯文本.txt |
 | ffmpeg + 转写通道 | 短视频→文字稿(硅基流动 SenseVoice 在线,或本地 faster-whisper) |
 
 ## 常用参数(给安装人)
@@ -63,7 +64,7 @@ sudo bash /opt/agent-kit/scripts/setup.sh --win-user <Windows用户名> \
 ## 安全说明
 
 - API Key 仅存于 WSL 内 `~/.config/agent-kit/env`(权限 600),不上传任何地方
-- Agent 默认工作在 WSL 的 `~/workspace`,触达 Windows 文件仅通过三个显式桥接目录;工作区规范(AGENTS.md)要求删除/覆盖前必须清单确认
+- Agent 的工作区即 Windows「文档\AI工作区」(WSL 经 `~/workspace` 软链访问);工作区规范(AGENTS.md)要求删除/覆盖前必须清单确认,对桌面/下载等真实目录从严执行
 - 本仓库不含任何账号、密钥、个人信息;安装脚本只从官方源(微软/Ubuntu/清华镜像/npmmirror/各 AI 官网)下载
 
 ## 许可证

@@ -24,12 +24,14 @@ find /opt/agent-kit -type f \( -name '*.sh' -o -name '*.py' -o -name '*.md' -o -
     -o -name '*.json' -o -name '*.txt' \) -exec sed -i 's/\r$//' {} +
 chmod +x /opt/agent-kit/scripts/*.sh
 
-# ---- 预置一个用户文件,验证不被覆盖 ----
-runuser -u "$KIT_USER" -- bash -c 'mkdir -p ~/workspace/notes && echo "我的私货" > ~/workspace/notes/_index.md'
+# ---- 预置一个用户文件(在未来的工作区真身位置),验证不被覆盖 ----
+mkdir -p "/mnt/c/Users/TestUser/Documents/AI工作区/notes"
+echo "我的私货" > "/mnt/c/Users/TestUser/Documents/AI工作区/notes/_index.md"
+chmod -R a+rwX "/mnt/c/Users/TestUser"
 
 # ---- 第 1 遍 ----
 echo "=========== 第 1 遍 setup.sh ==========="
-bash /opt/agent-kit/scripts/setup.sh --win-user TestUser
+bash /opt/agent-kit/scripts/setup.sh --win-user TestUser --win-docs /mnt/c/Users/TestUser/Documents
 
 # ---- 断言 ----
 HOMEDIR="$(getent passwd 1000 | cut -d: -f6)"
@@ -58,12 +60,15 @@ pass "工作区脚手架完整"
 [ "$(cat "$HOMEDIR/workspace/notes/_index.md")" = "我的私货" ] || fail "用户已有文件被覆盖!"
 pass "用户已有文件未被覆盖(--ignore-existing 生效)"
 
-[ -L "$HOMEDIR/workspace/win-桌面" ] || fail "win-桌面 符号链接缺失"
-[ "$(readlink "$HOMEDIR/workspace/win-桌面")" = "/mnt/c/Users/TestUser/OneDrive/Desktop" ] \
-    || fail "win-桌面 未优先指向 OneDrive 桌面"
-[ -L "$HOMEDIR/workspace/win-文档" ] || fail "win-文档 缺失"
-[ -L "$HOMEDIR/workspace/win-下载" ] || fail "win-下载 缺失"
-pass "Windows 目录桥接正确(含 OneDrive 优先)"
+[ -L "$HOMEDIR/workspace" ] || fail "workspace 不是软链"
+[ "$(readlink "$HOMEDIR/workspace")" = "/mnt/c/Users/TestUser/Documents/AI工作区" ] \
+    || fail "workspace 软链未指向 Windows 文档/AI工作区(实际:$(readlink "$HOMEDIR/workspace"))"
+grep -q "__WIN_DESKTOP__" "$HOMEDIR/workspace/AGENTS.md" && fail "AGENTS.md 占位符未替换"
+grep -q "/mnt/c/Users/TestUser/OneDrive/Desktop" "$HOMEDIR/workspace/AGENTS.md" \
+    || fail "AGENTS.md 未注入 OneDrive 桌面路径"
+grep -q "/mnt/c/Users/TestUser/Downloads" "$HOMEDIR/workspace/AGENTS.md" \
+    || fail "AGENTS.md 未注入下载路径"
+pass "工作区落在 Windows 文档目录 + AGENTS.md 路径注入正确(OneDrive 桌面优先)"
 
 jq -e '."$schema"' "$HOMEDIR/.config/opencode/opencode.json" >/dev/null \
     || fail "opencode.json 缺失或非法"
@@ -97,7 +102,7 @@ pass "ai-install 底层路径可用(qwen 已装上)"
 
 # ---- 第 2 遍(幂等) ----
 echo "=========== 第 2 遍 setup.sh(幂等验证) ==========="
-bash /opt/agent-kit/scripts/setup.sh --win-user TestUser
+bash /opt/agent-kit/scripts/setup.sh --win-user TestUser --win-docs /mnt/c/Users/TestUser/Documents
 
 grep -c 'agent-kit ---' "$HOMEDIR/.bashrc" | grep -qx 1 || fail "第 2 遍后 .bashrc 标记重复追加"
 [ "$(cat "$HOMEDIR/workspace/notes/_index.md")" = "我的私货" ] || fail "第 2 遍覆盖了用户文件"

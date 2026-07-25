@@ -7,7 +7,7 @@
 ```
 install.bat → scripts/install.ps1   # Windows 侧:WSL/Ubuntu/用户/agent 选择/快捷方式,调 setup.sh
 scripts/setup.sh                    # WSL root:镜像源/apt/Node22/所选 agents/命令入口(ai*4);--agents/--agents-only
-scripts/setup-user.sh               # WSL 用户:工作区脚手架/win-* 桥接/shell 配置/agent 基础配置
+scripts/setup-user.sh               # WSL 用户:工作区(建在 Win 文档目录+软链 ~/workspace)/路径注入/shell 配置
 scripts/configure.sh                # ai-config:服务商向导 → env + default-agent + opencode.json + Claude 接线
 scripts/video2text.sh + transcribe_local.py   # ai-video:SenseVoice API / 本地 faster-whisper
 workspace-template/                 # 复制到 ~/workspace;AGENTS.md 是 agent 行为规范(各家共读)

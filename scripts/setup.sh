@@ -18,6 +18,7 @@ trap 'die "安装在第 $LINENO 行中断。把上面的红字/报错发给安�
 [ "$(id -u)" -eq 0 ] || die "setup.sh 需要 root 运行(由 install.ps1 自动调用)"
 
 WIN_USER=""
+WIN_DOCS=""
 WITH_ASR=0
 USE_MIRROR=1
 AGENTS_CSV="opencode,kimi,claude"   # 默认推荐组合
@@ -25,6 +26,7 @@ AGENTS_ONLY=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --win-user) WIN_USER="${2:-}"; shift 2 ;;
+        --win-docs) WIN_DOCS="${2:-}"; shift 2 ;;
         --agents) AGENTS_CSV="${2:-$AGENTS_CSV}"; shift 2 ;;
         --agents-only) AGENTS_ONLY=1; shift ;;
         --with-asr) WITH_ASR=1; shift ;;
@@ -265,7 +267,8 @@ cat > /usr/local/bin/ai-video <<'EOF'
 exec bash /opt/agent-kit/scripts/video2text.sh "$@"
 EOF
 chmod +x /usr/local/bin/ai-video
-ok "命令已安装:ai(启动)/ ai-config(改配置)/ ai-video(视频转文字)/ ai-install(加装 agent)"
+
+ok "命令已安装:ai(启动)/ ai-config(改配置)/ ai-video(转文字)/ ai-install(加装 agent)"
 
 # ---------- 6. 可选:本地语音转写(faster-whisper) ----------
 if [ "$WITH_ASR" -eq 1 ]; then
@@ -282,7 +285,15 @@ fi
 # ---------- 7. 用户级安装(工作区/配置) ----------
 if [ "$AGENTS_ONLY" -eq 0 ]; then
     step "初始化 $KIT_USER 的工作区与配置…"
-    runuser -u "$KIT_USER" -- env WIN_USER="$WIN_USER" bash "$KIT_DIR/scripts/setup-user.sh"
+    WIN_DOCS_WSL=""
+    if [ -n "$WIN_DOCS" ]; then
+        case "$WIN_DOCS" in
+            /*) WIN_DOCS_WSL="$WIN_DOCS" ;;                      # 已是 WSL 路径(测试环境)
+            *)  WIN_DOCS_WSL="$(wslpath -u "$WIN_DOCS" 2>/dev/null || true)" ;;
+        esac
+    fi
+    runuser -u "$KIT_USER" -- env WIN_USER="$WIN_USER" WIN_DOCS_WSL="$WIN_DOCS_WSL" \
+        bash "$KIT_DIR/scripts/setup-user.sh"
 fi
 
 printf '\n'

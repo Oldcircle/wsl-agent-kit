@@ -11,35 +11,45 @@ KIT_DIR="/opt/agent-kit"
 . "$KIT_DIR/scripts/lib.sh"
 
 WIN_USER="${WIN_USER:-}"
+WIN_DOCS_WSL="${WIN_DOCS_WSL:-}"
 WS="$HOME/workspace"
 
-# ---------- 1. 工作区脚手架 ----------
-step "搭建工作区 $WS …"
-mkdir -p "$WS"
+# 探测 Windows 常用目录(含 OneDrive 重定向与中文名)
+first_dir() { for d in "$@"; do if [ -d "$d" ]; then printf '%s' "$d"; return 0; fi; done; return 1; }
+U="/mnt/c/Users/$WIN_USER"
+WIN_DESKTOP="$(first_dir "$U/OneDrive/Desktop" "$U/OneDrive/桌面" "$U/Desktop" || true)"
+WIN_DOWNLOADS="$(first_dir "$U/Downloads" || true)"
+[ -n "$WIN_DOCS_WSL" ] || WIN_DOCS_WSL="$(first_dir "$U/OneDrive/Documents" "$U/OneDrive/文档" "$U/Documents" || true)"
+
+# ---------- 1. 工作区:建在 Windows 文档目录,WSL 侧软链 ----------
+# 好处:资源管理器/Word/播放器/Obsidian 原生直开,无需任何网页或桥接。
+step "搭建工作区…"
+if [ -n "$WIN_DOCS_WSL" ] && [ -d "$WIN_DOCS_WSL" ]; then
+    TARGET="$WIN_DOCS_WSL/AI工作区"
+    if [ -e "$WS" ] && [ ! -L "$WS" ]; then
+        warn "检测到已有本地工作区 $WS,保持原位不搬家(迁移方法见 docs/TROUBLESHOOTING.md)"
+    else
+        mkdir -p "$TARGET"
+        ln -sfn "$TARGET" "$WS"
+        ok "工作区在 Windows「文档\\AI工作区」,WSL 经 ~/workspace 访问"
+    fi
+else
+    warn "未找到 Windows 文档目录(WIN_USER='$WIN_USER'),工作区建在 WSL 内 $WS"
+fi
+mkdir -p "$WS/"
 # --ignore-existing:她已有的笔记/文件绝不覆盖
-rsync -a --ignore-existing "$KIT_DIR/workspace-template/" "$WS/"
+# 注意必须 -r 而非 -a:工作区在 /mnt/c(NTFS),保留权限/属主会 EPERM
+rsync -r --ignore-existing "$KIT_DIR/workspace-template/" "$WS/"
 ok "工作区目录就绪(inbox/ projects/ notes/ templates/ archive/)"
 
-# ---------- 2. 桥接 Windows 常用目录 ----------
-step "桥接 Windows 桌面/文档/下载…"
-link_win() {
-    local label="$1"; shift
-    local target=""
-    for cand in "$@"; do
-        if [ -d "$cand" ]; then target="$cand"; break; fi
-    done
-    if [ -n "$target" ]; then
-        ln -sfn "$target" "$WS/$label"
-        ok "$label → $target"
-    fi
-}
-if [ -n "$WIN_USER" ] && [ -d "/mnt/c/Users/$WIN_USER" ]; then
-    U="/mnt/c/Users/$WIN_USER"
-    link_win "win-桌面"  "$U/OneDrive/Desktop" "$U/OneDrive/桌面" "$U/Desktop"
-    link_win "win-文档"  "$U/OneDrive/Documents" "$U/OneDrive/文档" "$U/Documents"
-    link_win "win-下载"  "$U/Downloads"
-else
-    warn "未找到 Windows 用户目录(WIN_USER='$WIN_USER'),跳过桥接。之后可手动: ln -s /mnt/c/Users/<你>/Desktop \$HOME/workspace/win-桌面"
+# ---------- 2. 把真实 Windows 路径写进 AGENTS.md(只在占位符还在时替换) ----------
+if grep -q "__WIN_DESKTOP__" "$WS/AGENTS.md" 2>/dev/null; then
+    sed -i \
+        -e "s#__WIN_DESKTOP__#${WIN_DESKTOP:-未检测到,按 /mnt/c/Users/用户名/Desktop 推断}#g" \
+        -e "s#__WIN_DOCUMENTS__#${WIN_DOCS_WSL:-未检测到}#g" \
+        -e "s#__WIN_DOWNLOADS__#${WIN_DOWNLOADS:-未检测到,按 /mnt/c/Users/用户名/Downloads 推断}#g" \
+        "$WS/AGENTS.md"
+    ok "AGENTS.md 已注入桌面/文档/下载真实路径"
 fi
 
 # ---------- 3. shell 与 npm 配置 ----------
