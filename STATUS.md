@@ -13,6 +13,17 @@ v2.0 整体重构完成,容器冒烟通过,**尚未真机验证**。相对 v1 �
 - **排障**:`ai doctor` 体检报告(Key 打码);`ai-desktop` 出错停住窗口;安装日志两侧留档,失败时自动打开所在文件夹;`ai update` 一键升级
 - **修掉的 v1 bug**:Kimi 装在 `~/.kimi-code/bin`,控制台(非交互 shell)看不到 → 改用 profile.d;控制台「安装」按钮经 WT 时 `;` 被拆成多个标签;AGENTS.md 引用的 pdftotext 实际没装
 
+### v2.0.1 健壮性修复(2026-09-26)
+
+一轮可用性/健壮性测试后的修复。Linux 侧有容器回归断言(smoke-inner.sh「健壮性回归」段);Windows 侧只过了语法解析与 PSScriptAnalyzer,**需真机验证**(见下方清单带 🆕 的项)。
+
+- **apt 源改 http**:全新系统没有 ca-certificates 时,https 镜像证书校验失败 → 一个包都装不上(国内网络下官方冒烟必挂)。包仍由 GPG 签名校验;`apt-get update` 加 `Error-Mode=any`,失败时 retry 才真正生效
+- **配置向导不再丢 Key**:以前选完服务商就清空 env,中途关窗口/Kimi 安装失败会清空配置,再跑一次连 env.bak 也被覆盖。现在写临时文件,走完才替换;非交互下空 Key 直接报错
+- **AGENTS.md 路径转义**:Windows 用户名含 `&`/`#` 时路径被写坏或 sed 报错中断安装
+- setup.sh 带值参数缺值时明确报错(以前静默退出);CRLF 的 .bashrc 先规范化(以前会重复加托管块);`ai doctor` 工作区不可用时报告落到家目录;ai-video 用法提示换行、认 `C:/…` 路径
+- 测试自身:`命令 | grep -q` 在 pipefail 下有 SIGPIPE 竞态(随机误报),改为先存变量
+- Windows:重启计数上限 2 次 + 老 wsl.exe 不认 `--status` 时按 LxssManager 服务判就绪(防 DISM 路径无限重启);失败退出清掉 RunOnce/续装图标;WSL 升级 UAC 被拒不再中止安装;老 WSL UTF-16 输出去 NUL 后再匹配虚拟化错误码;勾选列表先占位再定位(WT 滚屏错位);卸载快捷方式不再最小化;SHA256SUMS 优先取 releases.ubuntu.com;开镜像网络前先问再 `wsl --shutdown`;商店版 appx 未注册时用 `ubuntu2404.exe install --root` 补注册;卸载时 unregister 失败保留 distro 目录;控制台刷新防重入、「设为默认」移到后台线程
+
 ## 下次入口
 
 1. **真机验证**(容器测不到的,按顺序):
@@ -23,6 +34,7 @@ v2.0 整体重构完成,容器冒烟通过,**尚未真机验证**。相对 v1 �
    - 工作区:desktop.ini 图标生效、隐藏属性、从 WSL 覆盖写被隐藏的 AGENTS.md 是否需要先 `attrib -h`(已做防护)
    - 本机开 Clash 时 mirrored 模式生效;Kimi OAuth;Claude Code 接 DeepSeek 实测一轮对话
    - 卸载两个选项
+   - 🆕 v2.0.1:老 Win10 DISM 路径重启后不再二次要求重启;UAC 拒绝 WSL 升级后安装继续;「卸载」窗口正常显示;勾选列表在 WT 底部位置不错位;失败后下次登录不再自动弹安装;开 Clash 时先询问再重启 WSL
 2. 真机通过后更新 README 截图,把 ZIP 链接发给使用者
 3. 待观察:WT `--suppressApplicationTitle` 在旧版 WT 上的兼容性;hermes/goose 安装脚本 URL 稳定性;DeepSeek 模型名
 

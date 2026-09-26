@@ -13,8 +13,13 @@ KIT_DIR="/opt/agent-kit"
 . "$KIT_DIR/scripts/lib.sh"
 
 CONF_DIR="$HOME/.config/agent-kit"
-ENV_FILE="$CONF_DIR/env"
+REAL_ENV="$CONF_DIR/env"
 mkdir -p "$CONF_DIR"
+# 向导期间 Key 都写进临时文件,走完才替换正式的 env:
+# 中途关窗口/Ctrl+C/出错退出,原来的配置原封不动(以前会被清空,再跑一次连备份也丢了)
+ENV_FILE="$(mktemp "$CONF_DIR/.env.new.XXXXXX")"
+chmod 600 "$ENV_FILE"
+trap 'rm -f "$ENV_FILE"' EXIT
 
 OC_CONF="$HOME/.config/opencode/opencode.json"
 [ -f "$OC_CONF" ] || { mkdir -p "$HOME/.config/opencode"; cp "$KIT_DIR/config-template/opencode-base.json" "$OC_CONF"; }
@@ -48,8 +53,8 @@ ask_key() { # ask_key <提示> <变量名>:必填,自动清洗
         ask "$1" _k
         _k="$(clean_key "$_k")"
         [ -n "$_k" ] && break
+        [ -t 0 ] || die "没收到 Key,原配置未改动。重新运行 ai-config 即可"
         warn "没收到内容。复制好 Key 后,在这里右键或 Ctrl+V 粘贴,再按回车"
-        [ -t 0 ] || break
     done
     printf -v "$2" '%s' "$_k"
 }
@@ -144,7 +149,7 @@ choose_provider() {
     fi
     local cur=0 n=${#labels[@]} i key rest
     printf '\n你打算用哪家 AI?( ↑↓ 选择 + 回车;或直接按数字键;开通步骤:开始菜单→AI 办公助手→开通 AI 账号指南 )\n\n'
-    trap 'printf "\033[?25h"; exit 130' INT
+    trap 'printf "\033[?25h"; exit 130' INT   # exit 会触发 EXIT trap,清掉临时文件
     printf '\033[?25l'
     for ((i = 0; i < n; i++)); do printf '\n'; done
     while :; do
@@ -184,16 +189,11 @@ printf '│     答错了也没关系,随时输入 ai-config 重来    │\n'
 printf '└──────────────────────────────────────────────┘\n'
 choose_provider
 
-# 重新生成 env(旧的备份);视频转写 Key 与服务商无关,换服务商时保留
-OLD_SF=""; OLD_EXISTED=""
-if [ -f "$ENV_FILE" ]; then
-    OLD_EXISTED=1
-    cp "$ENV_FILE" "$ENV_FILE.bak"; chmod 600 "$ENV_FILE.bak"
-    OLD_SF="$(bash -c '. "$1" >/dev/null 2>&1; printf %s "${SILICONFLOW_API_KEY:-}"' _ "$ENV_FILE")"
+# 视频转写 Key 与服务商无关,换服务商时保留
+OLD_SF=""
+if [ -f "$REAL_ENV" ]; then
+    OLD_SF="$(bash -c '. "$1" >/dev/null 2>&1; printf %s "${SILICONFLOW_API_KEY:-}"' _ "$REAL_ENV")"
 fi
-: > "$ENV_FILE"
-chmod 600 "$ENV_FILE"
-restore_env() { [ -f "$ENV_FILE.bak" ] && [ -n "$OLD_EXISTED" ] && cp "$ENV_FILE.bak" "$ENV_FILE"; return 0; }
 
 case "$CHOICE" in
     1)
@@ -265,7 +265,6 @@ case "$CHOICE" in
         test_openai_endpoint "$BASE" "$KEY"
         ;;
     0)
-        restore_env
         if [ -f "$CONF_DIR/default-agent" ]; then
             ok "已跳过,原来的配置保持不变"
             exit 0
@@ -288,7 +287,6 @@ TODO
         exit 0
         ;;
     *)
-        restore_env
         warn "没有这个选项。重新运行 ai-config 即可。"
         exit 0
         ;;
@@ -309,6 +307,11 @@ if [ "$CHOICE" != "5" ]; then
         ok "视频转文字已启用(命令:ai-video 文件名)"
     fi
 fi
+
+# 走完了才替换正式配置(旧的留一份 env.bak)
+if [ -s "$REAL_ENV" ]; then cp "$REAL_ENV" "$REAL_ENV.bak"; chmod 600 "$REAL_ENV.bak"; fi
+mv -f "$ENV_FILE" "$REAL_ENV"
+chmod 600 "$REAL_ENV"
 
 rm -f "$HOME/workspace/开始使用前必读.txt"   # 配置完成,撤掉待办卡
 

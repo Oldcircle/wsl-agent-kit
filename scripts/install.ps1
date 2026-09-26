@@ -22,6 +22,8 @@ function Write-Note($msg)  { Write-Host "        $msg" -ForegroundColor DarkGray
 function Write-Fail($msg)  { Write-Host "`n[失败] $msg" -ForegroundColor Red }
 
 function Exit-WithPause($code) {
+    # 失败退出:撤掉 RunOnce 和桌面续装图标,免得下次登录又自动弹出一个注定失败的安装
+    if ($code -ne 0 -and (Get-Command Clear-ResumeAfterReboot -ErrorAction SilentlyContinue)) { Clear-ResumeAfterReboot }
     try { Stop-Transcript | Out-Null } catch { }
     Write-Host ''
     Read-Host '按回车键关闭窗口'
@@ -127,13 +129,29 @@ function Set-ResumeAfterReboot {
     } catch { }
 }
 
+# 为启用 WSL 已经重启了几次:防止「判定没就绪 → 重启 → 还是没就绪」无限循环
+$RebootCountFile = Join-Path $KitHome 'reboot-count.txt'
+function Get-RebootCount {
+    try { if (Test-Path $RebootCountFile) { return [int](Get-Content $RebootCountFile -Raw).Trim() } } catch { }
+    return 0
+}
+
 function Clear-ResumeAfterReboot {
+    Remove-Item $RebootCountFile -Force -ErrorAction SilentlyContinue
     try { Remove-ItemProperty -Path $RunOnceKey -Name 'AgentKitResume' -ErrorAction SilentlyContinue } catch { }
     $p = Join-Path ([Environment]::GetFolderPath('Desktop')) $ResumeLnkName
     if (Test-Path $p) { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 }
 
 function Request-Reboot {
+    $n = (Get-RebootCount) + 1
+    if ($n -gt 2) {
+        Write-Fail "已经为启用 WSL 重启过 $($n - 1) 次,系统仍报告没有就绪,再重启也没用。"
+        Write-Note '请打开「设置 → Windows 更新」装完所有更新并重启,然后重新双击 install.bat;'
+        Write-Note '仍不行就把本窗口截图发给安装人(见「常见问题」第 2、7 节)。'
+        Exit-WithPause 1
+    }
+    Set-Content -Path $RebootCountFile -Value $n -Encoding ASCII
     Set-ResumeAfterReboot
     Write-Host ''
     Write-Host '┌──────────────────────────────────────────────┐' -ForegroundColor Yellow
@@ -160,6 +178,11 @@ function Invoke-Elevated([string]$mode) {
         $p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$script`"", '-Mode', $mode, '-ResultFile', "`"$result`"")
     } catch {
+        if ($mode -eq 'update') {
+            # 升级只是锦上添花:没授权就用老版本继续
+            Write-Warn2 '没有获得管理员授权,跳过 WSL 升级'
+            return $false
+        }
         Write-Fail '没有获得管理员授权(可能点了「否」)。重新双击 install.bat,弹窗时点「是」。'
         Write-Note '如果这台电脑的账号不是管理员,需要让有管理员密码的人来点这一下。'
         Exit-WithPause 1
@@ -171,6 +194,11 @@ $wslReady = $false
 if (Test-Path $WslExe) {
     & $WslExe --status *> $null
     if ($LASTEXITCODE -eq 0) { $wslReady = $true }
+    elseif ((Get-Service LxssManager -ErrorAction SilentlyContinue) -and -not (Test-RebootPending)) {
+        # 老 Win10 自带的 wsl.exe 不认 --status,但 WSL 组件已经启用(DISM 路径重启后就是这样):
+        # 视为就绪,交给下面的「升级老版 WSL」处理;否则会一直判定没就绪、反复要求重启
+        $wslReady = $true
+    }
 }
 if (-not $wslReady) {
     if (Test-RebootPending) {
@@ -213,7 +241,11 @@ if ($proxy) {
             $cfg = $cfg.TrimEnd() + "`r`n`r`n[wsl2]`r`nnetworkingMode=mirrored`r`n"
         }
         [IO.File]::WriteAllText($wslconfig, $cfg.TrimStart(), (New-Object System.Text.UTF8Encoding($false)))
-        & $WslExe --shutdown *> $null
+        # 镜像网络是全局设置,要重启整个 WSL 才生效:会关掉正在运行的其他 WSL 程序(Docker Desktop 等),先问
+        Write-Note '新的网络设置需要重启 WSL 才生效;正在运行的其他 WSL 程序(如 Docker Desktop)会被关闭。'
+        if (Ask-YesNo '现在重启 WSL 吗?(选否也能继续安装,下次开机后生效)' $true) {
+            & $WslExe --shutdown *> $null
+        }
         Write-Ok '已开启 WSL 镜像网络(用得上你的代理,访问 GitHub 等海外服务更顺)'
         Write-Note '想关掉:删除 用户目录\.wslconfig 里的 networkingMode 一行'
     } else {
@@ -243,7 +275,12 @@ function Get-UbuntuImage {
     }
     if (-not $best) { Write-Warn2 '所有 Ubuntu 镜像站都连不上'; return $null }
     $curl = Join-Path $env:SystemRoot 'System32\curl.exe'
-    $sums = & $curl -fsSL -m 30 "$best/SHA256SUMS" 2>$null
+    # 校验值优先从 Ubuntu 官方站取:和镜像文件同源的话,镜像站被篡改时校验就形同虚设
+    $sums = & $curl -fsSL -m 20 'https://releases.ubuntu.com/noble/SHA256SUMS' 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $sums) {
+        Write-Note '官方校验文件取不到,改用镜像站的(仍能发现下载损坏)'
+        $sums = & $curl -fsSL -m 30 "$best/SHA256SUMS" 2>$null
+    }
     $entry = @($sums | Where-Object { $_ -match '^([0-9a-f]{64}) \*?(ubuntu-24\.04(\.\d+)?-wsl-amd64\.wsl)$' }) | Select-Object -Last 1
     if (-not $entry) { Write-Warn2 '镜像站上没找到 WSL 镜像'; return $null }
     $null = $entry -match '^([0-9a-f]{64}) \*?(\S+)$'
@@ -293,7 +330,10 @@ if ($Distro) {
             Write-Note "通过微软渠道下载 $fallback …"
             & $WslExe --install -d $fallback --no-launch
             if ($LASTEXITCODE -ne 0) { & $WslExe --install -d $fallback --no-launch --web-download }
-            if ($LASTEXITCODE -eq 0 -or (Test-DistroExists $fallback)) { $Distro = $fallback }
+            # 商店版(appx)配 --no-launch 时只装了程序、没注册发行版:用它自带的 exe 以 root 注册
+            $appx = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\ubuntu2404.exe'
+            if (-not (Test-DistroExists $fallback) -and (Test-Path $appx)) { & $appx install --root }
+            if (Test-DistroExists $fallback) { $Distro = $fallback }
         }
     }
     if (-not $Distro) {
@@ -307,8 +347,10 @@ Save-KitDistro $Distro
 # 冒烟:能不能跑起来。WSL2 起不来多半是 BIOS 没开虚拟化 → 提供 WSL1 兼容模式
 $smoke = & $WslExe -d $Distro -u root -e true 2>&1
 if ($LASTEXITCODE -ne 0) {
+    # 老版 wsl.exe 不认 WSL_UTF8,输出是 UTF-16:按 UTF-8 读进来每个字符后都夹着 NUL,先去掉再匹配
+    $smoke = ("$smoke" -replace "`0", '')
     Write-Fail "Ubuntu 启动失败:$smoke"
-    if ("$smoke" -match '0x80370102|0x80370114|virtualiz|虚拟|Hyper-V') {
+    if ($smoke -match '0x80370102|0x80370114|virtualiz|虚拟|Hyper-V') {
         Write-Host ''
         Write-Host '  原因:CPU 虚拟化没有开启。两个办法:' -ForegroundColor Yellow
         Write-Host '   1) 推荐:重启进 BIOS 打开 Intel VT-x / AMD SVM(见「常见问题」第 1 节),再双击 install.bat' -ForegroundColor Yellow
@@ -355,7 +397,10 @@ function Select-AgentsChecklist([string[]]$already) {
     Write-Host '   什么都不动直接回车 = 推荐组合' -ForegroundColor Gray
     Write-Host ''
     $width = [Math]::Max(40, [Console]::WindowWidth - 2)
-    $top = [Console]::CursorTop
+    # 先把列表要占的行输出出来(光标在窗口底部时这一步会滚屏),再倒回去定位;
+    # 否则第一次绘制时滚屏,记下的行号就失效了,之后每次重绘都错位(Windows Terminal 下必现)
+    for ($i = 0; $i -lt $items.Count; $i++) { Write-Host '' }
+    $top = [Math]::Max(0, [Console]::CursorTop - $items.Count)
     $idx = 0
     try { [Console]::CursorVisible = $false } catch { }
     while ($true) {
@@ -495,8 +540,8 @@ else     { $aiTarget = $WslExe; $aiArgs = $wslCmd }
 $shortcuts = @(
     @{ Name='AI 助手';        Target=$aiTarget; Args=$aiArgs; Icon='assistant'; Desk=$true;  Desc='和 AI 说话、派活' },
     @{ Name='AI 工作区';      Target=$wsFolder; Args='';      Icon='workspace'; Desk=$true;  Desc='AI 做出来的文件都在这里' },
-    @{ Name='AI 控制台';      Target=$psExe;    Args=$consoleArgs; Icon='console'; Desk=$true; Desc='查看/启动/管理所有 AI 助手' },
-    @{ Name='配置 AI 服务';   Target=$psExe;    Args="$consoleArgs -Action config"; Icon='config'; Desk=$false; Desc='换 AI 服务商、重填 Key' },
+    @{ Name='AI 控制台';      Target=$psExe;    Args=$consoleArgs; Icon='console'; Desk=$true; Desc='查看/启动/管理所有 AI 助手'; Hidden=$true },
+    @{ Name='配置 AI 服务';   Target=$psExe;    Args="$consoleArgs -Action config"; Icon='config'; Desk=$false; Desc='换 AI 服务商、重填 Key'; Hidden=$true },
     @{ Name='使用教程';       Target=(Join-Path $KitHome 'guide\USAGE.html'); Args=''; Icon='guide'; Desk=$false; Desc='怎么用、照抄就能用的话术' },
     @{ Name='开通 AI 账号指南'; Target=(Join-Path $KitHome 'guide\PROVIDERS.html'); Args=''; Icon='guide'; Desk=$false; Desc='Kimi/DeepSeek 等怎么开通' },
     @{ Name='常见问题';       Target=(Join-Path $KitHome 'guide\TROUBLESHOOTING.html'); Args=''; Icon='guide'; Desk=$false; Desc='出问题按症状查' },
@@ -509,7 +554,8 @@ foreach ($s in $shortcuts) {
     try {
         if (-not (Test-Path $s.Target)) { continue }   # 例如指南没生成出来
         $icon = Get-IconPath $s.Icon
-        $style = 1; if ($s.Target -eq $psExe) { $style = 7 }   # 控制台脚本本身不显示黑窗
+        # 只有控制台(WinForms 窗口)不显示黑窗;卸载要在窗口里问答,必须正常显示
+        $style = 1; if ($s.Hidden) { $style = 7 }
         New-Shortcut -Path (Join-Path $StartMenuDir "$($s.Name).lnk") -Target $s.Target -Arguments $s.Args `
             -Icon $icon -Description $s.Desc -WorkDir $KitDir -WindowStyle $style
         if ($s.Desk) {

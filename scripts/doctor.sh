@@ -13,6 +13,7 @@ set -u
 
 REPORT_DIR="$HOME/workspace/8-归档"
 [ -d "$REPORT_DIR" ] || REPORT_DIR="$HOME/workspace"
+[ -d "$REPORT_DIR" ] && [ -w "$REPORT_DIR" ] || REPORT_DIR="$HOME"   # 工作区丢了/链接断了也要能出报告
 REPORT="$REPORT_DIR/诊断报告.txt"
 
 mask() { local v="$1"; [ ${#v} -le 8 ] && { echo "***"; return; }; echo "${v:0:4}…${v: -4}"; }
@@ -84,7 +85,14 @@ fi
 echo; echo "[最近安装日志]"
 tail -n 15 /var/log/agent-kit/setup.log 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | sed 's/^/  /' || echo "  (无)"
 } 2>&1 | tee "$REPORT.tmp"
-sed 's/\x1b\[[0-9;]*m//g' "$REPORT.tmp" > "$REPORT" 2>/dev/null && rm -f "$REPORT.tmp"
-
 echo
-ok "体检报告已保存:AI工作区 → $(basename "$REPORT_DIR") → 诊断报告.txt(Key 已打码,可以放心发给安装人)"
+if sed 's/\x1b\[[0-9;]*m//g' "$REPORT.tmp" > "$REPORT" 2>/dev/null; then
+    rm -f "$REPORT.tmp"
+    case "$REPORT_DIR" in
+        "$HOME") ok "体检报告已保存:$REPORT(工作区不可用,存在了 Linux 家目录;Key 已打码)" ;;
+        *) ok "体检报告已保存:AI工作区 → $(basename "$REPORT_DIR") → 诊断报告.txt(Key 已打码,可以放心发给安装人)" ;;
+    esac
+else
+    rm -f "$REPORT.tmp"
+    warn "体检报告没能保存(上面的内容可以直接截图发给安装人)"
+fi

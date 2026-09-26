@@ -29,20 +29,22 @@ AGENTS_CSV="opencode,claude,kimi"   # 默认推荐组合
 AGENTS_ONLY=0
 UPDATE_MODE=0
 ORIG_ARGS="$*"
+# 带值参数缺了值:明确报错(以前 shift 2 失败会被 set -e 静默退出)
+need_val() { [ $# -ge 2 ] || die "参数 $1 后面缺少取值"; }
 while [ $# -gt 0 ]; do
     case "$1" in
-        --create-user)   CREATE_USER="${2:-}"; shift 2 ;;
-        --win-user)      WIN_USER="${2:-}"; shift 2 ;;
-        --win-docs)      WIN_DOCS="${2:-}"; shift 2 ;;
-        --win-desktop)   WIN_DESKTOP="${2:-}"; shift 2 ;;
-        --win-downloads) WIN_DOWNLOADS="${2:-}"; shift 2 ;;
-        --win-kit-dir)   WIN_KIT_DIR="${2:-}"; shift 2 ;;
-        --agents)        AGENTS_CSV="${2:-$AGENTS_CSV}"; shift 2 ;;
+        --create-user)   need_val "$@"; CREATE_USER="$2"; shift 2 ;;
+        --win-user)      need_val "$@"; WIN_USER="$2"; shift 2 ;;
+        --win-docs)      need_val "$@"; WIN_DOCS="$2"; shift 2 ;;
+        --win-desktop)   need_val "$@"; WIN_DESKTOP="$2"; shift 2 ;;
+        --win-downloads) need_val "$@"; WIN_DOWNLOADS="$2"; shift 2 ;;
+        --win-kit-dir)   need_val "$@"; WIN_KIT_DIR="$2"; shift 2 ;;
+        --agents)        need_val "$@"; AGENTS_CSV="${2:-$AGENTS_CSV}"; shift 2 ;;
         --agents-only)   AGENTS_ONLY=1; shift ;;
         --update)        UPDATE_MODE=1; AGENTS_ONLY=1; shift ;;
         --with-asr)      WITH_ASR=1; shift ;;
         --with-qwen)     AGENTS_CSV="$AGENTS_CSV,qwen"; shift ;;
-        --mirror)        MIRROR_MODE="${2:-auto}"; shift 2 ;;
+        --mirror)        need_val "$@"; MIRROR_MODE="${2:-auto}"; shift 2 ;;
         --no-mirror)     MIRROR_MODE="global"; shift ;;
         *) warn "忽略未知参数:$1"; shift ;;
     esac
@@ -132,10 +134,12 @@ if [ "$AGENTS_ONLY" -eq 0 ] || [ ! -f /etc/agent-kit/net.env ]; then
                     "official=$OFFICIAL_APT/dists/$CODENAME/Release")" \
                 || die "所有软件源都连不上。请检查网络(能打开网页吗?),然后重跑 install.bat。" ;;
     esac
+    # apt 源用 http:全新系统可能还没装 ca-certificates,https 源会证书校验失败、一个包都装不上。
+    # 安全性不受影响:apt 靠 GPG 签名校验包,不靠 TLS。
     case "$APT_PICK" in
-        tuna)   APT_BASE="https://mirrors.tuna.tsinghua.edu.cn/$UB_PATH" ;;
-        ustc)   APT_BASE="https://mirrors.ustc.edu.cn/$UB_PATH" ;;
-        aliyun) APT_BASE="https://mirrors.aliyun.com/$UB_PATH" ;;
+        tuna)   APT_BASE="http://mirrors.tuna.tsinghua.edu.cn/$UB_PATH" ;;
+        ustc)   APT_BASE="http://mirrors.ustc.edu.cn/$UB_PATH" ;;
+        aliyun) APT_BASE="http://mirrors.aliyun.com/$UB_PATH" ;;
         *)      APT_BASE="$OFFICIAL_APT" ;;
     esac
     if [ "$APT_PICK" = "official" ]; then REGION=global; else REGION=cn; fi
@@ -192,7 +196,8 @@ fi
 step "安装基础工具(约 2-5 分钟)…"
 note "git/curl/ripgrep/jq/ffmpeg/pandoc/pdf 工具/中文字体/python 办公库"
 export DEBIAN_FRONTEND=noninteractive
-retry 3 apt-get update -qq
+# Error-Mode=any:索引下载失败时返回非 0(默认只打警告、照样返回 0,retry 就形同虚设)
+retry 3 apt-get update -qq -o APT::Update::Error-Mode=any
 retry 3 apt-get install -y -qq --no-install-recommends \
     ca-certificates curl wget git sudo unzip zip xz-utils unar \
     ripgrep jq rsync file less \

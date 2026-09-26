@@ -98,16 +98,19 @@ $btnRefresh = New-Btn '刷新'
 
 # ---------------- 数据:一次 wsl 调用读全,后台线程执行,窗口不卡 ----------------
 $script:job = $null
-function Start-Refresh {
+function Start-Refresh([string]$pre = '') {
+    # 上一次还没读完就不重复开(连点「刷新」会泄漏后台线程)
+    if ($script:job) { return }
     $statusLbl.Text = '读取中…'
     $lv.Enabled = $false
     $ps = [PowerShell]::Create()
     [void]$ps.AddScript({
-        param($wsl, $distro)
+        param($wsl, $distro, $pre)
         $env:WSL_UTF8 = '1'
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        if ($pre) { & $wsl -d $distro -e bash -lc $pre 2>$null | Out-Null }
         & $wsl -d $distro -e bash -lc 'ai status --plain' 2>$null
-    }).AddArgument($WslExe).AddArgument($Distro)
+    }).AddArgument($WslExe).AddArgument($Distro).AddArgument($pre)
     $script:job = @{ PS = $ps; Handle = $ps.BeginInvoke() }
     $timer.Start()
 }
@@ -178,8 +181,8 @@ $lv.Add_DoubleClick($startAction)
 $btnDefault.Add_Click({
     $a = Get-Selected; if (-not $a) { return }
     if (-not $a.Installed) { Show-Msg '没安装的不能设为默认。'; return }
-    & $WslExe -d $Distro -e bash -lc "ai use $($a.Name)" | Out-Null
-    Start-Refresh
+    # 放到后台线程里做:虚拟机冷启动要十几秒,在界面线程上跑会让窗口卡死
+    Start-Refresh "ai use $($a.Name)"
 })
 
 $btnInstall.Add_Click({

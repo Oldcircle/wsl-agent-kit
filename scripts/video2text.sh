@@ -15,10 +15,11 @@ KIT_DIR="/opt/agent-kit"
 [ -f "$HOME/.config/agent-kit/env" ] && . "$HOME/.config/agent-kit/env"
 
 IN="${1:-}"
-[ -n "$IN" ] || die "用法:ai-video <视频或音频文件> [输出.txt]\n例如:ai-video 1-收件箱/对标视频.mp4"
+[ -n "$IN" ] || die "用法:ai-video <视频或音频文件> [输出.txt]
+例如:ai-video 1-收件箱/对标视频.mp4"
 # 允许直接粘 Windows 路径(C:\Users\...\视频.mp4,资源管理器里「复制文件地址」得到的,可能带引号)
 IN="${IN#\"}"; IN="${IN%\"}"
-case "$IN" in [A-Za-z]:\\*) IN="$(wslpath -u "$IN")" ;; esac
+case "$IN" in [A-Za-z]:[\\/]*) IN="$(wslpath -u "$IN")" ;; esac
 [ -f "$IN" ] || die "找不到文件:$IN"
 OUT="${2:-${IN%.*}.转写.txt}"
 

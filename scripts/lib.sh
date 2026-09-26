@@ -45,6 +45,9 @@ write_block() {
     local file=$1 begin=$2 end=$3 content=$4 tmp has_end=0
     mkdir -p "$(dirname "$file")"
     touch "$file"
+    # 先统一去掉 CR:.bashrc 被 Windows 编辑器存成 CRLF 时,标记行对不上会重复加块(bash 本身也读不了 CRLF)
+    # --follow-symlinks:.bashrc 可能是 dotfiles 仓库的软链,别把链接替换成普通文件
+    sed -i --follow-symlinks 's/\r*$//' "$file"
     grep -qxF "$end" "$file" && has_end=1
     tmp="$(mktemp)"
     # 旧版(v1)块没有 end 标记:只删掉紧跟 begin 的那几行已知内容,别误删后面别人追加的配置

@@ -84,10 +84,16 @@ ok "工作区文件夹就绪(1-收件箱 … 8-归档)"
 
 # ---------- 4. AGENTS.md:安装包维护的「AI 工作规范」 ----------
 # 每次安装都更新到最新版(并注入真实桌面/下载路径)。若发现被改动过,旧版先备份到 8-归档。
+# 路径里可能有 & # \(Windows 用户名如 Tom&Jerry),进 sed 替换串前要转义
+sed_repl() { printf '%s' "$1" | sed -e 's/[\\&#]/\\&/g'; }
 render_agents() {
-    sed -e "s#__WIN_DESKTOP__#${WIN_DESKTOP:-未检测到,按 /mnt/c/Users/用户名/Desktop 推断}#g" \
-        -e "s#__WIN_DOCUMENTS__#${WIN_DOCS:-未检测到}#g" \
-        -e "s#__WIN_DOWNLOADS__#${WIN_DOWNLOADS:-未检测到,按 /mnt/c/Users/用户名/Downloads 推断}#g" \
+    local desk docs dl
+    desk="$(sed_repl "${WIN_DESKTOP:-未检测到,按 /mnt/c/Users/用户名/Desktop 推断}")"
+    docs="$(sed_repl "${WIN_DOCS:-未检测到}")"
+    dl="$(sed_repl "${WIN_DOWNLOADS:-未检测到,按 /mnt/c/Users/用户名/Downloads 推断}")"
+    sed -e "s#__WIN_DESKTOP__#${desk}#g" \
+        -e "s#__WIN_DOCUMENTS__#${docs}#g" \
+        -e "s#__WIN_DOWNLOADS__#${dl}#g" \
         "$KIT_DIR/workspace-template/AGENTS.md"
 }
 NEW_AGENTS="$(mktemp)"

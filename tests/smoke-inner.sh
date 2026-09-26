@@ -79,7 +79,7 @@ pass "网络体检:$(grep '^AGENT_KIT_REGION' /etc/agent-kit/net.env);软件源 
 
 for b in ffmpeg pandoc pdftotext unar; do command -v "$b" >/dev/null || fail "缺 $b"; done
 python3 -c 'import pandas, openpyxl, docx, PIL, matplotlib' || fail "python 办公库缺失"
-fc-list | grep -qi 'Noto Sans CJK' || fail "缺中文字体"
+grep -qi 'Noto Sans CJK' <<<"$(fc-list)" || fail "缺中文字体"
 pass "ffmpeg/pandoc/pdftotext/unar + python 办公库 + 中文字体"
 
 # ---- 断言:工作区与迁移 ----
@@ -136,7 +136,9 @@ PLAIN="$(runuser -u "$KIT_USER" -- bash -lc 'ai list --plain')"
 echo "$PLAIN" | grep -q '^opencode|1|' || fail "--plain 缺 opencode 已装标记"
 STATUS="$(runuser -u "$KIT_USER" -- bash -lc 'ai status --plain')"
 [ "$(echo "$STATUS" | grep -c '^agent=')" -eq 9 ] || fail "ai status --plain 应含 9 行 agent=:$STATUS"
-runuser -u "$KIT_USER" -- bash -lc 'ai help' | grep -q 'ai doctor' || fail "ai help 输出不对"
+# 注意:pipefail 下别写「命令 | grep -q」:grep 匹配即退出,前面的命令写输出时收到 SIGPIPE,整条管道会随机判失败
+HELP="$(runuser -u "$KIT_USER" -- bash -lc 'ai help')"
+grep -q 'ai doctor' <<<"$HELP" || fail "ai help 输出不对"
 pass "ai list/status/help 接口正确"
 
 # ---- agents-only 追加安装 ----
@@ -169,7 +171,8 @@ got="$(runuser -u "$KIT_USER" -- bash -c '. ~/.config/agent-kit/env; printf %s "
 [ "$(cat "$CONF/default-agent")" = "opencode" ] || fail "default-agent 不是 opencode"
 jq -e '.provider.deepseek.options.apiKey == "{env:DEEPSEEK_API_KEY}" and .model == "deepseek/deepseek-flash"' \
     "$HOMEDIR/.config/opencode/opencode.json" >/dev/null || fail "opencode.json provider 配置不对"
-runuser -u "$KIT_USER" -- bash -lc 'ai status --plain' | grep -qx 'claude_wired=1' || fail "Claude 接线广播失效"
+STATUS="$(runuser -u "$KIT_USER" -- bash -lc 'ai status --plain')"
+grep -qx 'claude_wired=1' <<<"$STATUS" || fail "Claude 接线广播失效"
 pass "configure:Key 去空格去引号、\$ 安全转义、OpenCode + Claude 同步接线"
 
 # 换一家(硅基流动以外)且转写 Key 直接回车 → 旧转写 Key 保留
@@ -193,6 +196,53 @@ OUT="$(runuser -u "$KIT_USER" -- bash -lc 'ai-video /tmp/不存在.mp4' 2>&1)"
 set -e
 echo "$OUT" | grep -q '找不到文件' || fail "ai-video 参数校验异常:$OUT"
 pass "ai-video 参数校验正常"
+
+# ---- 健壮性回归(2026-09 修复的问题) ----
+echo "=========== 健壮性回归 ==========="
+set +e
+OUT="$(bash /opt/agent-kit/scripts/setup.sh --agents 2>&1)"; rc=$?
+set -e
+[ "$rc" -ne 0 ] && echo "$OUT" | grep -q '缺少取值' || fail "setup.sh 参数缺值没有明确报错:rc=$rc [$OUT]"
+pass "setup.sh 参数缺值会明确报错"
+
+# 向导中途被关掉 / 选 Kimi 但安装失败:原 Key 都不能丢,再跑一次也不能丢
+runuser -u "$KIT_USER" -- bash -c \
+    'printf "2\nsk-keep-me\n\n\n" | bash /opt/agent-kit/scripts/configure.sh' >/dev/null || fail "预置配置失败"
+runuser -u "$KIT_USER" -- bash -c \
+    '{ printf "2\n"; sleep 5; } | timeout -s INT 2 bash /opt/agent-kit/scripts/configure.sh' >/dev/null 2>&1 || true
+grep -q 'sk-keep-me' "$CONF/env" || fail "向导中断后原 Key 丢了"
+runuser -u "$KIT_USER" -- bash -c 'printf "0\n" | bash /opt/agent-kit/scripts/configure.sh' >/dev/null
+grep -q 'sk-keep-me' "$CONF/env" || fail "中断后再运行向导,原 Key 丢了"
+runuser -u "$KIT_USER" -- bash -c 'printf "2\n" | bash /opt/agent-kit/scripts/configure.sh' >/dev/null 2>&1 \
+    && fail "非交互下 Key 为空应当报错退出"
+grep -q 'sk-keep-me' "$CONF/env" || fail "空 Key 把原配置覆盖了"
+ls "$CONF"/.env.new.* >/dev/null 2>&1 && fail "向导退出后残留临时文件"
+pass "配置向导:中断/空 Key 都不会破坏原配置,无临时文件残留"
+
+# Windows 用户名里带 & # 的路径写进 AGENTS.md
+for u in 'Tom&Jerry' 'A#B'; do
+    mkdir -p "/mnt/c/Users/$u/Desktop" "/mnt/c/Users/$u/Documents"; chmod -R a+rwX "/mnt/c/Users/$u"
+    runuser -u "$KIT_USER" -- env HOME=/tmp/h-$$ WIN_DOCS_WSL="/mnt/c/Users/$u/Documents" \
+        WIN_DESKTOP_WSL="/mnt/c/Users/$u/Desktop" bash -c 'mkdir -p "$HOME" && bash /opt/agent-kit/scripts/setup-user.sh' \
+        >/dev/null 2>&1 || fail "用户名含特殊字符 [$u] 时 setup-user.sh 失败"
+    grep -qF "/mnt/c/Users/$u/Desktop" "/mnt/c/Users/$u/Documents/AI工作区/AGENTS.md" || fail "AGENTS.md 路径被写坏:[$u]"
+    rm -rf "/tmp/h-$$"
+done
+pass "路径含 & / # 时 AGENTS.md 渲染正确"
+
+# CRLF 的 .bashrc 不出重复块
+printf 'alias x=1\r\n' >> "$B"; sed -i 's/$/\r/' "$B"
+bash /opt/agent-kit/scripts/setup.sh "${SETUP_ARGS[@]}" --agents opencode >/dev/null 2>&1 || fail "CRLF .bashrc 下重跑失败"
+[ "$(grep -c '^# --- agent-kit ---$' "$B")" = 1 ] || fail "CRLF .bashrc 出现重复托管块"
+grep -q $'\r' "$B" && fail ".bashrc 里仍有 CR"
+pass "CRLF 的 .bashrc 被规范化,托管块不重复"
+
+# 工作区不可用时 ai doctor 仍能出报告
+mv "$WS" "$WS.off"
+runuser -u "$KIT_USER" -- bash -lc 'ai doctor' >/dev/null 2>&1 || true
+[ -s "$HOMEDIR/诊断报告.txt" ] || fail "工作区不可用时 ai doctor 没有出报告"
+mv "$WS.off" "$WS"
+pass "工作区不可用时 ai doctor 报告存到家目录"
 
 echo ""
 echo "全部断言通过 🎉"
