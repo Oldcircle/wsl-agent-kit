@@ -8,3 +8,8 @@
 *.txt  text eol=lf
 *.ps1  text eol=crlf
 *.bat  text eol=crlf
+scripts/bin/* text eol=lf
+VERSION text eol=lf
+*.html text eol=lf
+*.ico  binary
+*.png  binary

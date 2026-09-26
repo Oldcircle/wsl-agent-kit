@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec bash /opt/agent-kit/scripts/configure.sh "$@"

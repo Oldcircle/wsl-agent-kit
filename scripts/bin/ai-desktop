@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# 桌面「AI 助手」图标实际运行的命令:启动 ai;异常退出时把窗口停住,让人看清报错。
+# (以前窗口一闪就没,用户只能说「打不开」,排障无从下手)
+
+# 顺手把工作区里 agent 新建的隐藏文件夹(.claude/.opencode 等)在 Windows 里也设为隐藏,
+# 免得用户在资源管理器里看到一堆看不懂的点开头文件夹。后台执行,不拖慢启动。
+hide_dot_entries() {
+    local ws attrib f
+    ws="$(readlink -f "$HOME/workspace" 2>/dev/null)" || return 0
+    case "$ws" in /mnt/[a-z]/*) ;; *) return 0 ;; esac
+    attrib=/mnt/c/Windows/System32/attrib.exe
+    [ -x "$attrib" ] || return 0
+    for f in "$ws"/.[!.]* "$ws/AGENTS.md" "$ws/CLAUDE.md"; do
+        [ -e "$f" ] || continue
+        "$attrib" +h "$(wslpath -w "$f")" >/dev/null 2>&1
+    done
+}
+( hide_dot_entries & ) 2>/dev/null
+
+/usr/local/bin/ai "$@"
+code=$?
+if [ "$code" -ne 0 ] && [ "$code" -ne 130 ]; then
+    printf '\n\033[33m[!] AI 助手意外退出了(代码 %s)。\033[0m\n' "$code"
+    echo "    上面最后几行就是原因。可以:"
+    echo "    · 输入 ai doctor 自查(会生成一份体检报告)"
+    echo "    · 或把这个窗口拍照发给帮你安装的人"
+    echo
+    read -r -p "按回车关闭窗口…" _
+fi
+exit "$code"

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# 追加安装 agent:ai-install <名字> [名字...]
+set -u
+# shellcheck source=../lib.sh
+. /opt/agent-kit/scripts/lib.sh
+if [ $# -eq 0 ]; then
+    echo "用法:ai-install <名字> [名字...]"
+    echo "可选:$KNOWN_AGENTS"
+    exit 1
+fi
+list=""
+for a in "$@"; do
+    case " $KNOWN_AGENTS " in
+        *" $a "*) list="$list,$a" ;;
+        *) echo "不认识「$a」,可选:$KNOWN_AGENTS"; exit 1 ;;
+    esac
+done
+exec sudo bash /opt/agent-kit/scripts/setup.sh --agents "${list#,}" --agents-only

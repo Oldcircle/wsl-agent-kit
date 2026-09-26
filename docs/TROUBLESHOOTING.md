@@ -1,42 +1,49 @@
-# 排障手册
+# 常见问题
 
-> 按症状查。每条:症状 → 原因 → 解决。解决不了就把报错截图发给安装人。
+> 按症状查。每条:症状 → 原因 → 解决。
+> **万能第一步**:开始菜单 →「AI 办公助手」→「修复或升级」(重新跑一遍安装,不会丢文件)。
+> **万能第二步**:AI 控制台 →「体检 / 排障」,把生成的「AI工作区\8-归档\诊断报告.txt」发给安装人。
 
-## 1. Ubuntu 启动报错 0x80370102 / "please enable the Virtual Machine Platform"
+## 1. 报错 0x80370102 / "please enable the Virtual Machine Platform"
 
-**原因**:BIOS 里 CPU 虚拟化没开(很多品牌机出厂关闭)。
-**解决**:重启进 BIOS(开机狂按 F2/F10/Del,品牌不同),找到 Intel VT-x / AMD SVM / Virtualization Technology,设为 Enabled,保存重启,再跑 install.bat。
+**原因**:BIOS 里 CPU 虚拟化没开(很多品牌机出厂关闭)。安装开头如果提示「CPU 虚拟化看起来没有开启」,也是这个。
+**解决**:重启进 BIOS(开机时连按 F2 / F10 / Del / Esc,品牌不同),找到 Intel VT-x / AMD SVM / Virtualization Technology,设为 Enabled,保存重启,再运行「修复或升级」。
+**进不了 BIOS**:安装程序会问「用兼容模式继续吗」,选 y 即可(用的是 WSL1,功能都能用)。
 
-## 2. install.bat 提示要重启,重启后又提示重启(循环)
+## 2. 提示要重启,重启后又提示重启(循环)
 
-**原因**:Windows 更新挂起或功能启用失败。
-**解决**:先去「设置→Windows 更新」把所有更新装完并重启;管理员 PowerShell 跑 `wsl --update`;再运行 install.bat。仍不行:控制面板→程序→启用或关闭 Windows 功能→勾选「适用于 Linux 的 Windows 子系统」和「虚拟机平台」→ 重启。
+**原因**:Windows 更新挂起或组件启用失败。
+**解决**:先去「设置 → Windows 更新」把所有更新装完并重启;再运行 install.bat。仍不行:控制面板 → 程序 → 启用或关闭 Windows 功能 → 勾选「适用于 Linux 的 Windows 子系统」和「虚拟机平台」→ 重启。
 
-## 3. Ubuntu 下载特别慢或失败
+## 3. 下载 Ubuntu 特别慢或失败
 
-**原因**:微软商店通道被网络环境干扰。
-**解决**:脚本已自动尝试 `--web-download` 备用通道;还不行就换网络(手机热点往往有效)再跑一次 install.bat。
+安装程序会自动从清华/中科大/阿里/华为镜像里挑最快的下载,断了会接着下;全失败才走微软渠道。
+**解决**:换个网络(手机热点往往有效)再运行一次,已下载的部分不会重下。公司网络可能拦截,换家里网络试。
 
-## 4. 「AI 助手」窗口一闪就没
+## 4. 双击「AI 助手」报错 / 窗口停在一段红字上
 
-**原因**:多为发行版没起来或 ai 命令缺失。
-**解决**:开始菜单打开 Ubuntu 看真实报错。若显示 `ai: command not found`,重跑 install.bat(幂等,可放心重复)。
+新版窗口出错时会停住并提示。按提示输入 `ai doctor` 体检;或拍照发给安装人。
+若是**窗口一闪就没**(老版本常见):运行「修复或升级」更新到新版。
 
-## 5. Kimi OAuth 登录时浏览器没弹出来
+## 5. Kimi 登录时浏览器没弹出来
 
-**解决**:终端里会同时印出一个网址,手动复制到 Windows 浏览器打开即可完成登录。之后要让自动弹出生效:关掉窗口重开一次(需要 `BROWSER=wslview` 生效)。
+**解决**:终端里会同时印出一个网址,手动复制到浏览器打开即可完成登录(在终端里选中文字 = 复制)。
 
 ## 6. 提示 Key 无效 / 401
 
-**解决**:`ai-config` 重新粘一遍(注意别带空格/引号/换行);确认对应平台余额>0、Key 没被删。GLM Coding Plan 的 Key 走专用端点:向导里选 3 后类型要选 `b`,选成 `a`(按量)就会 401(见 PROVIDERS.md 第 3 节)。
+**解决**:「配置 AI 服务」重新粘一遍(向导会自动去掉多余的空格和引号);确认对应平台余额 > 0、Key 没被删。智谱 GLM Coding Plan 的 Key 要在向导里选 3 后类型选 `b`,选成 `a`(按量)就会 401。体检报告里的「Key 验证」一行会直接告诉你 Key 是否被拒。
 
-## 7. 公司电脑/域策略装不上
+## 7. 公司电脑 / 域策略装不上
 
-WSL 需要管理员权限,部分公司电脑被 IT 策略禁用虚拟化组件。**解决**:找 IT 开通,或换个人电脑。这个没有绕过办法(也不该绕)。
+WSL 需要管理员启用一次,部分公司电脑被 IT 策略禁用虚拟化组件。**解决**:找 IT 开通,或换个人电脑。这个没有绕过办法(也不该绕)。
+**账号不是管理员**:弹 UAC 时让有管理员密码的人输入一次即可,其余步骤都在你自己的账号下完成。
 
 ## 8. Gemini CLI / Codex / Goose / Hermes 装不上或用不了
 
-这几个的安装源或服务在海外(GitHub / Google / OpenAI),国内网络经常失败——**脚本已设计为非致命**,不影响其他 agent。确有需要:换网络环境后 `ai-install <名字>` 重试;Gemini 还需要能登录 Google 账号,没有海外网络就别选它。
+这几个的安装源或服务在海外(GitHub / Google / OpenAI)。安装程序会先测 GitHub,连不上就直接跳过(不会卡住),其他 agent 不受影响。
+**解决**:
+- 电脑上开着 Clash / v2rayN 等代理:Windows 11 上安装程序会自动开启「WSL 镜像网络」,代理在 WSL 里直接可用;然后 `ai-install hermes` 重试
+- Windows 10 或没开代理:这几个就别选了,国内服务(Kimi/DeepSeek/智谱/Moonshot)全部不受影响
 
 ## 8b. OpenClaw(小龙虾)注意事项
 
@@ -44,20 +51,35 @@ WSL 需要管理员权限,部分公司电脑被 IT 策略禁用虚拟化组件�
 - 它主打的 WhatsApp/Telegram/Discord 通道国内基本不可用,按「本机对话助理」用即可
 - **不要随便安装社区技能/插件**:其技能市场有公开的供应链安全争议;非程序员保持默认配置
 
-## 9. 磁盘空间
+## 9. 网络相关
 
-整套约占 3-6GB(Ubuntu+工具+模型缓存)。C 盘紧张时:`wsl --manage Ubuntu-24.04 --set-sparse true` 可回收空间;或先清理 C 盘再装。
+- **所有软件源都连不上**:先确认电脑能打开网页;公司网络/VPN 可能拦 WSL。安装程序会在域名解析全失败时自动改用公共 DNS(223.5.5.5)
+- **想关掉「WSL 镜像网络」**:用记事本打开 `C:\Users\你的用户名\.wslconfig`,删掉 `networkingMode=mirrored` 一行,重启电脑
+- **在海外**:安装程序会自动测速改用官方源,不用做任何设置
 
-## 10. 想彻底卸载
+## 10. 磁盘空间
 
-管理员 PowerShell:`wsl --unregister Ubuntu-24.04`(⚠️ 会删掉 WSL 里所有文件,但你的产出都在 Windows「文档\AI工作区」里,不受影响);再删掉桌面快捷方式即可。
+整套约占 4-6GB(Ubuntu + 工具 + agent)。AI 运行环境在 `%LOCALAPPDATA%\AgentKit\distro`。
+C 盘紧张时:管理员 PowerShell 运行 `wsl --manage AI-Assistant --set-sparse true` 可回收已删除文件占的空间。
 
-## 11. 换了新电脑怎么搬家
+## 11. 卸载
 
-工作区就在「文档\AI工作区」,用你平时搬文档的任何方式(U 盘/网盘)拷到新机同位置;新机跑 install.bat → `ai-config` 重配 Key 即可。
+开始菜单 →「AI 办公助手」→「卸载」,或 设置 → 应用 → AI 办公助手 → 卸载。
+选「完全卸载」会删掉图标、开始菜单和 AI 运行环境;**「文档\AI工作区」里你的文件永远保留**。
+
+## 12. 换了新电脑怎么搬家
+
+工作区就在「文档\AI工作区」,用你平时搬文档的方式(U 盘/网盘)拷到新机同位置;新机运行 install.bat → 配置 AI 服务即可。
+
+## 13. 工作区里看到 AGENTS.md、CLAUDE.md 或点开头的文件夹
+
+那是 AI 的工作规范和内部记录,平时是隐藏的(资源管理器开了「显示隐藏的项目」才看得到)。**别删、别改**;个人要求请写进「6-笔记\我的偏好.md」,或者直接对 AI 说「记住……」。
 
 ## 给安装人:远程排障要点
 
-- 一切脚本幂等,重跑 install.bat 是万能第一步
-- WSL 内日志现场:`/opt/agent-kit`(脚本)、`~/.config/agent-kit/`(env/default-agent)、`~/.qwen/settings.json`、`~/.kimi-code/config.toml`
-- 网络类问题优先怀疑:公司代理、家用路由的境外 DNS 污染;npm/pip/apt 已全部指向国内镜像,Kimi/DeepSeek 等 API 本身是国内直连
+- 一切脚本幂等,「修复或升级」是万能第一步
+- 让对方点控制台「体检 / 排障」,拿到 `8-归档\诊断报告.txt`(含版本、网络区域、各服务连通、Key 是否被拒、最近安装日志,Key 已打码)
+- 日志:Windows 侧 `%LOCALAPPDATA%\AgentKit\logs\`;WSL 侧 `/var/log/agent-kit/setup.log`
+- 配置现场:`/opt/agent-kit`(脚本)、`/etc/agent-kit/net.env`(镜像选择)、`~/.config/agent-kit/`(env/default-agent)
+- 手动控制镜像:`sudo bash /opt/agent-kit/scripts/setup.sh --mirror cn|global|auto`
+- v1 旧版升级:目录会从 inbox/projects/… 自动改名为 1-收件箱…8-归档,文件原样保留;旧 AGENTS.md 若被改过会备份到 8-归档

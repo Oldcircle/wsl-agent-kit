@@ -26,8 +26,8 @@
 2. 充值 ¥10 起步
 3. 电脑上运行 `ai-config` → 选 2 → 粘贴 Key
 
-- 默认模型 `deepseek-v4-flash`(便宜、快、带思考);要更强改 `deepseek-v4-pro`
-- 注意:2026-07-24 起旧模型名 `deepseek-chat`/`deepseek-reasoner` 已废弃,网上旧教程里的名字别用
+- 默认模型 `deepseek-flash`(DeepSeek-V4.1-Flash:便宜、快、带思考,**支持看图**);要更强改 `deepseek-v4-pro`(不支持视觉)
+- 注意:旧名 `deepseek-chat`/`deepseek-reasoner` 早已废弃;`deepseek-v4-flash` 这个名字仍被接受但对应模型已退役(请求转由 V4.1-Flash 承接),统一用 `deepseek-flash`
 - 端点:OpenAI 兼容 `https://api.deepseek.com/v1`;Anthropic 兼容 `https://api.deepseek.com/anthropic`
 - 装了 Claude Code 的话,向导会问「用哪个界面打开」——选 Claude Code 就是 DeepSeek 官方文档推荐的组合
 

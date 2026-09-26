@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# AI 助手统一入口(ai help 看全部用法)
+set -u
+# shellcheck source=../lib.sh
+. /opt/agent-kit/scripts/lib.sh
+CONF_DIR="$HOME/.config/agent-kit"
+# shellcheck source=/dev/null
+[ -f "$CONF_DIR/env" ] && . "$CONF_DIR/env"
+
+is_known() { case " $KNOWN_AGENTS " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+has_agent() { agent_bin "$1" >/dev/null; }
+default_agent() { cat "$CONF_DIR/default-agent" 2>/dev/null || true; }
+
+run_agent() { # <名字> [参数...]
+    local a="$1" bin; shift
+    mkdir -p "$HOME/workspace"; cd "$HOME/workspace" || exit 1
+    if bin="$(agent_bin "$a")"; then exec "$bin" "$@"; fi
+    echo "[!] 「$a」还没安装,这次先用 OpenCode 打开(想装它:ai-install $a)"
+    exec opencode "$@"
+}
+
+usage() {
+    cat <<EOF
+AI 办公助手 v$KIT_VERSION
+
+  ai                 启动默认的 AI 助手(等于双击桌面「AI 助手」)
+  ai <名字>          这次临时换一个,如 ai claude / ai kimi
+  ai use <名字>      换默认(以后双击图标就是它)
+  ai list            看装了哪些、默认是谁
+  ai menu            ↑↓ 选一个启动
+  ai-config          换 AI 服务商 / 重填 Key
+  ai-install <名字>  加装 agent(可一次多个:ai-install hermes goose)
+  ai update          把已装的 agent 全部升级到最新
+  ai doctor          体检:网络/配置/各 agent 状态,出问题先跑它
+  ai-video <文件>    视频/音频转文字稿
+
+可选的名字:$KNOWN_AGENTS
+EOF
+}
+
+case "${1:-}" in
+    help|-h|--help) usage; exit 0 ;;
+    version|-v|--version) echo "$KIT_VERSION"; exit 0 ;;
+    doctor)  shift; exec bash /opt/agent-kit/scripts/doctor.sh "$@" ;;
+    update)  exec sudo bash /opt/agent-kit/scripts/setup.sh --update ;;
+    config)  shift; exec bash /opt/agent-kit/scripts/configure.sh "$@" ;;
+    install) shift; exec /usr/local/bin/ai-install "$@" ;;
+    video)   shift; exec bash /opt/agent-kit/scripts/video2text.sh "$@" ;;
+    list)
+        DEF="$(default_agent)"
+        if [ "${2:-}" = "--plain" ]; then   # 机器可读:名字|已装|默认(install.ps1 用)
+            for a in $KNOWN_AGENTS; do
+                inst=0; has_agent "$a" && inst=1
+                d=0; [ "$a" = "$DEF" ] && d=1
+                printf '%s|%d|%d\n' "$a" "$inst" "$d"
+            done
+            exit 0
+        fi
+        echo "已安装的 agent(* 为默认):"
+        for a in $KNOWN_AGENTS; do
+            if has_agent "$a"; then
+                if [ "$a" = "$DEF" ]; then echo "  * $a"; else echo "    $a"; fi
+            fi
+        done
+        echo "临时用某个:ai <名字>;换默认:ai use <名字>;加装:ai-install <名字>"
+        exit 0 ;;
+    status)
+        # 机器可读,供「AI 控制台」一次读全:key=value 行 + agent=名字|已装|默认
+        DEF="$(default_agent)"
+        MODEL=""
+        [ -f "$HOME/.config/opencode/opencode.json" ] && \
+            MODEL="$(jq -r '.model // ""' "$HOME/.config/opencode/opencode.json" 2>/dev/null || true)"
+        [ "$DEF" = "kimi" ] && MODEL="Kimi 会员"
+        AW=0; [ -n "${ANTHROPIC_BASE_URL:-}" ] && [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ] && AW=1
+        SF=0; [ -n "${SILICONFLOW_API_KEY:-}" ] && SF=1
+        printf 'version=%s\ndefault=%s\nmodel=%s\nclaude_wired=%d\ntranscribe=%d\n' \
+            "$KIT_VERSION" "${DEF:-}" "$MODEL" "$AW" "$SF"
+        for a in $KNOWN_AGENTS; do
+            inst=0; has_agent "$a" && inst=1
+            d=0; [ "$a" = "$DEF" ] && d=1
+            printf 'agent=%s|%d|%d\n' "$a" "$inst" "$d"
+        done
+        exit 0 ;;
+    menu)
+        if [ ! -t 0 ]; then echo "ai menu 需要在终端窗口里用"; exit 1; fi
+        AVAIL=""
+        for a in $KNOWN_AGENTS; do has_agent "$a" && AVAIL="$AVAIL $a"; done
+        # shellcheck disable=SC2086
+        set -- $AVAIL
+        [ $# -gt 0 ] || { echo "还没有装任何 agent?运行 ai-install <名字>"; exit 1; }
+        cur=0; n=$#
+        printf '\n选择要启动的 AI( ↑↓ + 回车 ):\n\n'
+        i=0; while [ $i -lt $n ]; do printf '\n'; i=$((i+1)); done
+        while :; do
+            printf '\033[%dA' "$n"
+            i=1
+            for a in "$@"; do
+                if [ $((i-1)) -eq $cur ]; then printf '\033[2K \033[7m %s \033[0m\n' "$a"
+                else printf '\033[2K  %s\n' "$a"; fi
+                i=$((i+1))
+            done
+            IFS= read -rsn1 k || exit 1
+            case "$k" in
+                $'\033') read -rsn2 -t 1 r || r=""
+                         case "$r" in
+                             '[A') cur=$(( (cur-1+n)%n )) ;;
+                             '[B') cur=$(( (cur+1)%n )) ;;
+                         esac ;;
+                '') shift "$cur"; exec /usr/local/bin/ai "$1" ;;
+            esac
+        done ;;
+    use)
+        NEW="${2:-}"
+        if [ -z "$NEW" ] || ! is_known "$NEW"; then
+            echo "用法:ai use <名字>(可选:$KNOWN_AGENTS)"; exit 1
+        fi
+        has_agent "$NEW" || { echo "「$NEW」还没安装,先运行:ai-install $NEW"; exit 1; }
+        mkdir -p "$CONF_DIR"; echo "$NEW" > "$CONF_DIR/default-agent"
+        echo "默认已换成:$NEW(以后双击「AI 助手」就是它)"
+        exit 0 ;;
+esac
+
+if [ -n "${1:-}" ] && is_known "$1"; then
+    A="$1"; shift
+    if [ "$A" = "claude" ] && [ -z "${ANTHROPIC_BASE_URL:-}" ]; then
+        echo "[提示] Claude Code 还没接上国内服务(你选的服务商没有 Anthropic 兼容接口,或还没配置)。"
+        echo "       接下来会进入 Anthropic 官方登录,需要海外网络和账号;国内用户建议 ai-config 选 DeepSeek/智谱/Moonshot。"
+    fi
+    run_agent "$A" "$@"
+fi
+if [ -n "${1:-}" ] && [ "${1#-}" = "$1" ]; then
+    echo "不认识「$1」。"; usage; exit 1
+fi
+
+if [ -z "$(default_agent)" ]; then
+    echo "第一次使用,先花 1 分钟选一下 AI 服务…"
+    bash /opt/agent-kit/scripts/configure.sh || exit 1
+fi
+run_agent "$(default_agent)" "$@"

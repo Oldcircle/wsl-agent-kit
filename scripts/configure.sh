@@ -3,7 +3,7 @@
 #  配置向导:选服务商 → 填 Key → 设默认 agent → 测试连通
 #  随时可重跑:终端输入 ai-config
 #  产物: ~/.config/agent-kit/env(Key)
-#        ~/.config/agent-kit/default-agent(opencode|kimi|qwen)
+#        ~/.config/agent-kit/default-agent(opencode|kimi|claude)
 #        ~/.config/opencode/opencode.json(OpenCode 供应商与默认模型)
 # ============================================================
 set -euo pipefail
@@ -31,6 +31,29 @@ ask() { # ask <提示> <变量名> [默认值]
     printf -v "$var" '%s' "$val"
 }
 
+# 粘贴 Key 时常见的「脏东西」:首尾空格、换行、中英文引号、误带的 Bearer 前缀
+clean_key() {
+    local k="$1"
+    k="${k//$'\r'/}"
+    # 中文引号用字节写,源码保持纯 ASCII:“ ” ‘ ’ = e2 80 9c/9d/98/99
+    k="$(printf '%s' "$k" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+        -e 's/^Bearer[[:space:]]*//' -e "s/[\"']//g" \
+        -e $'s/\xe2\x80\x9c//g; s/\xe2\x80\x9d//g; s/\xe2\x80\x98//g; s/\xe2\x80\x99//g')"
+    printf '%s' "$k"
+}
+
+ask_key() { # ask_key <提示> <变量名>:必填,自动清洗
+    local _k=""
+    while :; do
+        ask "$1" _k
+        _k="$(clean_key "$_k")"
+        [ -n "$_k" ] && break
+        warn "没收到内容。复制好 Key 后,在这里右键或 Ctrl+V 粘贴,再按回车"
+        [ -t 0 ] || break
+    done
+    printf -v "$2" '%s' "$_k"
+}
+
 test_openai_endpoint() { # <baseUrl> <key> → 打印结果,不中断
     local base="$1" key="$2" code
     printf "    正在测试连通性…"
@@ -48,12 +71,12 @@ test_openai_endpoint() { # <baseUrl> <key> → 打印结果,不中断
 add_opencode_provider() {
     local id="$1" name="$2" npmpkg="$3" base="$4" envkey="$5" key="$6" model="$7"
     {
-        echo "export $envkey=\"$key\""
-        # 兼容层:Qwen Code(可选装)走 OpenAI 兼容三件套
+        env_line "$envkey" "$key"
+        # 兼容层:Qwen Code 等走 OpenAI 兼容三件套
         if [ "$npmpkg" = "@ai-sdk/openai-compatible" ]; then
-            echo "export OPENAI_API_KEY=\"$key\""
-            echo "export OPENAI_BASE_URL=\"$base\""
-            echo "export OPENAI_MODEL=\"$model\""
+            env_line OPENAI_API_KEY "$key"
+            env_line OPENAI_BASE_URL "$base"
+            env_line OPENAI_MODEL "$model"
         fi
     } >> "$ENV_FILE"
     local tmp
@@ -72,12 +95,15 @@ add_opencode_provider() {
 # 「用哪个打开」只决定默认,不决定谁能用——配一次 Key,处处可用。
 wire_claude_env() { # <anthropic_base> <key> <model>
     {
-        echo "export ANTHROPIC_BASE_URL=\"$1\""
-        echo "export ANTHROPIC_AUTH_TOKEN=\"$2\""
-        echo "export ANTHROPIC_MODEL=\"$3\""
-        echo "export ANTHROPIC_SMALL_FAST_MODEL=\"$3\""
-        echo "export API_TIMEOUT_MS=600000"
-        echo "export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
+        env_line ANTHROPIC_BASE_URL "$1"
+        env_line ANTHROPIC_AUTH_TOKEN "$2"
+        env_line ANTHROPIC_MODEL "$3"
+        env_line ANTHROPIC_DEFAULT_OPUS_MODEL "$3"
+        env_line ANTHROPIC_DEFAULT_SONNET_MODEL "$3"
+        env_line ANTHROPIC_DEFAULT_HAIKU_MODEL "$3"
+        env_line CLAUDE_CODE_SUBAGENT_MODEL "$3"
+        env_line API_TIMEOUT_MS 600000
+        env_line CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC 1
     } >> "$ENV_FILE"
     if command -v claude >/dev/null 2>&1; then
         ok "Claude Code 已同步接线(随时可从控制台/ai claude 启动)"
@@ -117,7 +143,7 @@ choose_provider() {
         return 0
     fi
     local cur=0 n=${#labels[@]} i key rest
-    printf '\n你打算用哪家 AI?( ↑↓ 选择 + 回车;或直接按数字键;开通步骤见 docs/PROVIDERS.md )\n\n'
+    printf '\n你打算用哪家 AI?( ↑↓ 选择 + 回车;或直接按数字键;开通步骤:开始菜单→AI 办公助手→开通 AI 账号指南 )\n\n'
     trap 'printf "\033[?25h"; exit 130' INT
     printf '\033[?25l'
     for ((i = 0; i < n; i++)); do printf '\n'; done
@@ -158,22 +184,33 @@ printf '│     答错了也没关系,随时输入 ai-config 重来    │\n'
 printf '└──────────────────────────────────────────────┘\n'
 choose_provider
 
-# 重新生成 env(旧的备份)
-[ -f "$ENV_FILE" ] && cp "$ENV_FILE" "$ENV_FILE.bak"
+# 重新生成 env(旧的备份);视频转写 Key 与服务商无关,换服务商时保留
+OLD_SF=""; OLD_EXISTED=""
+if [ -f "$ENV_FILE" ]; then
+    OLD_EXISTED=1
+    cp "$ENV_FILE" "$ENV_FILE.bak"; chmod 600 "$ENV_FILE.bak"
+    OLD_SF="$(bash -c '. "$1" >/dev/null 2>&1; printf %s "${SILICONFLOW_API_KEY:-}"' _ "$ENV_FILE")"
+fi
 : > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+restore_env() { [ -f "$ENV_FILE.bak" ] && [ -n "$OLD_EXISTED" ] && cp "$ENV_FILE.bak" "$ENV_FILE"; return 0; }
 
 case "$CHOICE" in
     1)
+        if ! agent_bin kimi >/dev/null; then
+            warn "Kimi Code 还没安装,现在装(约 1 分钟)…"
+            sudo bash "$KIT_DIR/scripts/setup.sh" --agents kimi --agents-only </dev/null \
+                || die "Kimi Code 安装失败。检查网络后重新运行 ai-config"
+        fi
         echo "kimi" > "$CONF_DIR/default-agent"
         ok "已设为 Kimi Code。"
         printf '\n接下来:启动 AI 助手后,首次会让你选登录方式 → 选 OAuth/浏览器登录,\n'
         printf 'Windows 浏览器会自动弹出,用 Kimi 账号(手机号)登录即可。\n'
-        printf '还没买会员?手机 Kimi App 里购买 Kimi Code 会员,详见 docs/PROVIDERS.md 第 1 节。\n'
+        printf '还没买会员?手机 Kimi App 里购买 Kimi Code 会员,步骤见 开始菜单→AI 办公助手→开通 AI 账号指南。\n'
         ;;
     2)
-        ask "粘贴 DeepSeek API Key(sk-开头)" KEY
-        ask "模型" MODEL "deepseek-v4-flash"
+        ask_key "粘贴 DeepSeek API Key(sk-开头)" KEY
+        ask "模型" MODEL "deepseek-flash"
         add_opencode_provider "deepseek" "DeepSeek" "@ai-sdk/openai-compatible" \
             "https://api.deepseek.com/v1" "DEEPSEEK_API_KEY" "$KEY" "$MODEL"
         test_openai_endpoint "https://api.deepseek.com/v1" "$KEY"
@@ -181,11 +218,12 @@ case "$CHOICE" in
         ;;
     3)
         ask "你用的是哪种?a=按量付费(普通 API Key) b=Coding Plan 包月套餐" GLMKIND "a"
-        ask "粘贴智谱 API Key" KEY
+        ask_key "粘贴智谱 API Key" KEY
         ask "模型" MODEL "glm-5.2"
         if [ "$GLMKIND" = "b" ]; then
-            add_opencode_provider "zhipu" "智谱GLM(CodingPlan)" "@ai-sdk/anthropic" \
-                "https://open.bigmodel.cn/api/anthropic" "ZHIPU_API_KEY" "$KEY" "$MODEL"
+            # Coding Plan 的 Key 只认套餐专用端点(普通 paas/v4 会 401)
+            add_opencode_provider "zhipu" "智谱GLM(CodingPlan)" "@ai-sdk/openai-compatible" \
+                "https://open.bigmodel.cn/api/coding/paas/v4" "ZHIPU_API_KEY" "$KEY" "$MODEL"
             pick_agent_for_anthropic "https://open.bigmodel.cn/api/anthropic" "$KEY" "$MODEL" "claude"
         else
             add_opencode_provider "zhipu" "智谱GLM" "@ai-sdk/openai-compatible" \
@@ -195,14 +233,14 @@ case "$CHOICE" in
         fi
         ;;
     4)
-        ask "粘贴百炼 API Key(sk-开头)" KEY
+        ask_key "粘贴百炼 API Key(sk-开头)" KEY
         ask "模型" MODEL "qwen-max"
         add_opencode_provider "dashscope" "阿里百炼" "@ai-sdk/openai-compatible" \
             "https://dashscope.aliyuncs.com/compatible-mode/v1" "DASHSCOPE_API_KEY" "$KEY" "$MODEL"
         test_openai_endpoint "https://dashscope.aliyuncs.com/compatible-mode/v1" "$KEY"
         ;;
     5)
-        ask "粘贴硅基流动 API Key(sk-开头)" KEY
+        ask_key "粘贴硅基流动 API Key(sk-开头)" KEY
         ask "模型" MODEL "deepseek-ai/DeepSeek-V3.2"
         add_opencode_provider "siliconflow" "硅基流动" "@ai-sdk/openai-compatible" \
             "https://api.siliconflow.cn/v1" "SILICONFLOW_API_KEY" "$KEY" "$MODEL"
@@ -210,7 +248,7 @@ case "$CHOICE" in
         ok "这个 Key 同时用于「视频转文字」(ai-video 命令)"
         ;;
     6)
-        ask "粘贴 Moonshot API Key(sk-开头)" KEY
+        ask_key "粘贴 Moonshot API Key(sk-开头)" KEY
         ask "模型" MODEL "kimi-k2.7-code"
         add_opencode_provider "moonshot" "Moonshot Kimi" "@ai-sdk/openai-compatible" \
             "https://api.moonshot.cn/v1" "MOONSHOT_API_KEY" "$KEY" "$MODEL"
@@ -220,12 +258,18 @@ case "$CHOICE" in
     7)
         ask "服务地址 baseUrl(形如 https://xxx/v1)" BASE
         ask "模型名" MODEL
-        ask "API Key" KEY
+        BASE="${BASE%/}"
+        ask_key "API Key" KEY
         add_opencode_provider "custom" "自定义" "@ai-sdk/openai-compatible" \
             "$BASE" "CUSTOM_API_KEY" "$KEY" "$MODEL"
         test_openai_endpoint "$BASE" "$KEY"
         ;;
     0)
+        restore_env
+        if [ -f "$CONF_DIR/default-agent" ]; then
+            ok "已跳过,原来的配置保持不变"
+            exit 0
+        fi
         mkdir -p "$HOME/workspace"
         cat > "$HOME/workspace/开始使用前必读.txt" <<'TODO'
 【AI 助手 · 开始使用前的 3 件事】
@@ -244,6 +288,7 @@ TODO
         exit 0
         ;;
     *)
+        restore_env
         warn "没有这个选项。重新运行 ai-config 即可。"
         exit 0
         ;;
@@ -251,10 +296,16 @@ esac
 
 # ---------- 可选:视频转文字 Key ----------
 if [ "$CHOICE" != "5" ]; then
-    printf '\n【可选】视频/语音转文字需要一个硅基流动 Key(很便宜,注册送额度;docs/PROVIDERS.md 第 5 节)\n'
-    ask "有就粘贴,没有直接回车跳过" SFKEY ""
-    if [ -n "${SFKEY:-}" ]; then
-        echo "export SILICONFLOW_API_KEY=\"$SFKEY\"" >> "$ENV_FILE"
+    printf '\n【可选】视频/语音转文字需要一个硅基流动 Key(很便宜,注册送额度;见「开通 AI 账号指南」第 5 节)\n'
+    if [ -n "$OLD_SF" ]; then
+        ask "已有转写 Key($(printf '%s' "$OLD_SF" | cut -c1-6)…),回车沿用;要换就粘贴新的" SFKEY ""
+    else
+        ask "有就粘贴,没有直接回车跳过" SFKEY ""
+    fi
+    SFKEY="$(clean_key "${SFKEY:-}")"
+    [ -n "$SFKEY" ] || SFKEY="$OLD_SF"
+    if [ -n "$SFKEY" ]; then
+        env_line SILICONFLOW_API_KEY "$SFKEY" >> "$ENV_FILE"
         ok "视频转文字已启用(命令:ai-video 文件名)"
     fi
 fi

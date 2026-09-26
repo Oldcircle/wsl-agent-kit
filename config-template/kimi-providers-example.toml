@@ -22,4 +22,4 @@
 #
 # [models.ds]
 # provider = "deepseek"
-# model = "deepseek-v4-flash"
+# model = "deepseek-flash"
