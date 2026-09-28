@@ -244,5 +244,31 @@ runuser -u "$KIT_USER" -- bash -lc 'ai doctor' >/dev/null 2>&1 || true
 mv "$WS.off" "$WS"
 pass "工作区不可用时 ai doctor 报告存到家目录"
 
+# sudo 保留代理变量(ai-install / ai update 经 sudo 调 setup.sh)
+visudo -cf /etc/sudoers.d/agent-kit >/dev/null || fail "sudoers.d/agent-kit 语法错误"
+GOT="$(runuser -u "$KIT_USER" -- env HTTPS_PROXY=http://proxy.test:8080 https_proxy=http://proxy.test:8080 \
+    sudo sh -c 'printf "%s|%s" "$HTTPS_PROXY" "$https_proxy"' 2>&1 || true)"
+[ "$GOT" = "http://proxy.test:8080|http://proxy.test:8080" ] || fail "sudo 丢了代理变量:[$GOT]"
+pass "sudo 保留代理变量"
+
+# npm 卡死不退出时:硬超时 → retry → 报失败并继续,不会无限挂住
+mkdir -p /tmp/fakenpm
+cat > /tmp/fakenpm/npm <<'FAKE'
+#!/bin/bash
+[ "$1" = install ] && exec sleep 600
+exec /usr/local/bin/npm "$@"
+FAKE
+chmod +x /tmp/fakenpm/npm
+command -v codex >/dev/null && fail "前置条件:codex 不应已安装"
+t0=$(date +%s)
+OUT="$(env PATH="/tmp/fakenpm:$PATH" AGENT_KIT_INSTALL_TIMEOUT=3 \
+    bash /opt/agent-kit/scripts/setup.sh --agents codex --agents-only 2>&1)" || fail "npm 超时后 setup.sh 不应整体失败"
+dt=$(( $(date +%s) - t0 ))
+[ "$dt" -lt 90 ] || fail "npm 卡死时安装挂了 ${dt}s,超时没生效"
+grep -q 'Codex CLI 安装失败' <<<"$OUT" || fail "npm 超时后没有报安装失败:$OUT"
+pkill -f 'sleep 600' 2>/dev/null || true
+rm -rf /tmp/fakenpm
+pass "npm 卡死时 ${dt}s 内超时重试并报失败"
+
 echo ""
 echo "全部断言通过 🎉"

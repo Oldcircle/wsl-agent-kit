@@ -51,6 +51,8 @@ docker run --rm -v "$PWD:/mnt" mcr.microsoft.com/powershell:lts-ubuntu-22.04 pws
   'foreach($f in Get-ChildItem /mnt/scripts/*.ps1){$e=$null;[System.Management.Automation.Language.Parser]::ParseFile($f.FullName,[ref]$null,[ref]$e)|Out-Null;"$($f.Name): $($e.Count)"}'
 ```
 
+宿主机只能经本机代理上网时(直连不通):`docker run` 加 `--network host -e http_proxy=… -e https_proxy=…`;Docker Hub 拉不动可用 `crane pull` 走代理存 tar 再 `docker load`。
+
 真实 Windows 端到端(UAC、重启续装、镜像导入、快捷方式、WT、OAuth)容器覆盖不了,发版前需真机过一遍,清单见 STATUS.md。
 
 ## 发布

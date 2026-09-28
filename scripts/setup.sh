@@ -97,7 +97,12 @@ if [ -z "$KIT_USER" ]; then
     KIT_USER="$name"
 fi
 mkdir -p /etc/sudoers.d
-printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$KIT_USER" > /etc/sudoers.d/agent-kit
+# env_keep:ai-install / ai update / ai-config 都经 sudo 调 setup.sh,sudo 默认清空环境变量,
+# 用户在 WSL 里手动设的代理会丢,npm/curl 改走直连 → 连不上或卡住
+{
+    printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$KIT_USER"
+    printf 'Defaults env_keep += "http_proxy https_proxy no_proxy all_proxy HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY"\n'
+} > /etc/sudoers.d/agent-kit
 chmod 440 /etc/sudoers.d/agent-kit
 ini_set /etc/wsl.conf user default "$KIT_USER"
 ini_set /etc/wsl.conf automount options '"metadata"' keep
@@ -275,6 +280,8 @@ chmod 644 /etc/profile.d/agent-kit.sh
 ok "命令:ai / ai-config / ai-install / ai-video(详见 ai help)"
 
 # ---------- 7. 安装所选 agents ----------
+# 单个 agent 单次安装的最长时间(秒);超时算失败、交给 retry。测试里调小
+AGENT_INSTALL_TIMEOUT="${AGENT_KIT_INSTALL_TIMEOUT:-900}"
 # npm 系:install_npm_agent <npm包> <命令名> <显示名>
 install_npm_agent() {
     local pkg="$1" bin="$2" name="$3"
@@ -283,8 +290,10 @@ install_npm_agent() {
         return 0
     fi
     note "从 $NPM_REGISTRY 下载 $pkg …"
-    if ! retry 3 npm install -g "$pkg@latest" \
-        --registry="$NPM_REGISTRY" --no-fund --no-audit --loglevel=error >/dev/null; then
+    # 硬超时:连接被重置时 npm 可能既不报错也不退出(实测挂 25 分钟以上),retry 永远轮不到
+    if ! retry 3 timeout -k 10 "$AGENT_INSTALL_TIMEOUT" npm install -g "$pkg@latest" \
+        --registry="$NPM_REGISTRY" --fetch-timeout=60000 --fetch-retries=2 \
+        --no-fund --no-audit --loglevel=error >/dev/null; then
         warn "$name 安装失败(稍后可 ai-install $bin 重试)"
         return 1
     fi
@@ -303,7 +312,7 @@ install_user_script_agent() {
         warn "$name 需要访问 GitHub,当前网络连不上,已跳过(开了代理/换网络后:ai-install $bin)"
         return 1
     fi
-    if runuser -u "$KIT_USER" -- bash -lc "$script" </dev/null; then
+    if timeout -k 10 "$AGENT_INSTALL_TIMEOUT" runuser -u "$KIT_USER" -- bash -lc "$script" </dev/null; then
         ok "$name 就绪"
     else
         warn "$name 安装失败(多为网络原因;稍后可 ai-install $bin 重试)"
@@ -333,7 +342,8 @@ install_one_agent() {
                       'curl -fsSL --connect-timeout 20 https://code.kimi.com/kimi-code/install.sh | bash' ;;
         hermes)   step "Hermes Agent(爱马仕)"
                   if [ "$UPDATE_MODE" -eq 1 ] && runuser -u "$KIT_USER" -- bash -lc 'command -v hermes' >/dev/null 2>&1; then
-                      runuser -u "$KIT_USER" -- bash -lc 'hermes update' </dev/null || warn "Hermes 更新失败"
+                      timeout -k 10 "$AGENT_INSTALL_TIMEOUT" runuser -u "$KIT_USER" -- bash -lc 'hermes update' </dev/null \
+                          || warn "Hermes 更新失败"
                   else
                       install_user_script_agent "Hermes Agent" "hermes" 1 \
                           'curl -fsSL --connect-timeout 20 https://hermes-agent.nousresearch.com/install.sh | bash'

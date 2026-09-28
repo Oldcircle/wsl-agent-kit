@@ -24,6 +24,14 @@ v2.0 整体重构完成,容器冒烟通过,**尚未真机验证**。相对 v1 �
 - 测试自身:`命令 | grep -q` 在 pipefail 下有 SIGPIPE 竞态(随机误报),改为先存变量
 - Windows:重启计数上限 2 次 + 老 wsl.exe 不认 `--status` 时按 LxssManager 服务判就绪(防 DISM 路径无限重启);失败退出清掉 RunOnce/续装图标;WSL 升级 UAC 被拒不再中止安装;老 WSL UTF-16 输出去 NUL 后再匹配虚拟化错误码;勾选列表先占位再定位(WT 滚屏错位);卸载快捷方式不再最小化;SHA256SUMS 优先取 releases.ubuntu.com;开镜像网络前先问再 `wsl --shutdown`;商店版 appx 未注册时用 `ubuntu2404.exe install --root` 补注册;卸载时 unregister 失败保留 distro 目录;控制台刷新防重入、「设为默认」移到后台线程
 
+### v2.0.2 安装卡死修复(2026-09-28)
+
+容器冒烟时实测:npm 连接被重置后既不报错也不退出(单次挂 25 分钟以上),外层 `retry 3` 永远轮不到,安装窗口无声卡死。
+
+- **agent 安装硬超时**:npm 系与官方脚本系(kimi/hermes/goose)单次最长 900 秒(`AGENT_KIT_INSTALL_TIMEOUT` 可调),超时算失败交给 retry;npm 另加 `--fetch-timeout=60000 --fetch-retries=2`
+- **sudo 保留代理变量**:`ai-install` / `ai update` / `ai-config` 经 sudo 调 setup.sh,sudo 默认清空环境,用户手动设的 `HTTPS_PROXY` 等会丢 → `/etc/sudoers.d/agent-kit` 加 `env_keep`(`--agents-only` 也会重写,老用户 `ai update` 一次即生效)
+- 回归断言:sudo 透传代理变量;假 npm 卡死时限时内报失败且安装继续
+
 ## 下次入口
 
 1. **真机验证**(容器测不到的,按顺序):
